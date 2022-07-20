@@ -177,7 +177,7 @@ GEM
       coffee-script-source
       execjs
     coffee-script-source (1.12.2)
-    concurrent-ruby (1.1.9)
+    concurrent-ruby (1.1.10)
     connection_pool (2.2.5)
     counter_culture (3.0.0)
       activerecord (>= 4.2)
@@ -389,7 +389,7 @@ GEM
     httpclient (2.8.3)
     hypershield (0.2.2)
       activerecord (>= 5)
-    i18n (1.8.11)
+    i18n (1.12.0)
       concurrent-ruby (~> 1.0)
     i18n-js (3.9.0)
       i18n (>= 0.6.6)
@@ -470,7 +470,7 @@ GEM
     mini_magick (4.11.0)
     mini_mime (1.1.2)
     mini_portile2 (2.6.1)
-    minitest (5.14.4)
+    minitest (5.16.2)
     modis (4.0.0)
       activemodel (>= 5.2)
       activesupport (>= 5.2)
@@ -821,7 +821,7 @@ GEM
       multipart-post (~> 2.0)
       naught (~> 1.0)
       simple_oauth (~> 0.3.0)
-    tzinfo (2.0.4)
+    tzinfo (2.0.5)
       concurrent-ruby (~> 1.0)
     uglifier (4.2.0)
       execjs (>= 0.3.0, < 3)
@@ -837,7 +837,7 @@ GEM
     vault (0.16.0)
       aws-sigv4
     vcr (6.0.0)
-    view_component (2.44.0)
+    view_component (2.61.0)
       activesupport (>= 5.0.0, < 8.0)
       method_source (~> 1.0)
     virtus (1.0.5)
@@ -876,7 +876,7 @@ GEM
       activerecord (>= 5.2)
     xpath (3.2.0)
       nokogiri (~> 1.8)
-    zeitwerk (2.5.1)
+    zeitwerk (2.6.0)
     zonebie (0.6.1)
 
 PLATFORMS
@@ -1033,7 +1033,7 @@ DEPENDENCIES
   validate_url (~> 1.0)
   vault (~> 0.16)
   vcr (~> 6.0)
-  view_component (~> 2.44)
+  view_component (~> 2.61)
   wcag_color_contrast (~> 0.1)
   web-console (~> 4.2)
   webdrivers (~> 5.0)
