@@ -131,7 +131,7 @@ group :development do
   gem "guard", "~> 2.18", require: false # Guard is a command line tool to easily handle events on file system modifications
   gem "guard-livereload", "~> 2.5", require: false # Guard::LiveReload automatically reloads your browser when 'view' files are modified
   gem "i18n-tasks", "~> 0.9.35" # Helpers to find and manage missing and unused translations
-  gem "listen", "~> 3.7", require: false # Helps 'listen' to file system modifications events (also used by other gems like guard)
+  gem "listen", "~> 3.9", require: false # Helps 'listen' to file system modifications events (also used by other gems like guard)
   gem "memory_profiler", "~> 1.0", require: false # Memory profiling routines for Ruby 2.3+
   gem "web-console", "~> 4.2" # Rails Console on the Browser
 end
