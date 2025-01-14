@@ -2,22 +2,19 @@ require "rails_helper"
 
 RSpec.describe Notifications::Reactions::Send, type: :service do
   let(:user) { create(:user) }
-  let(:article) { create(:article, user: user) }
+  let(:subforem) { create(:subforem) }
+  let(:article) { create(:article, user: user, subforem: subforem) }
   let(:user2) { create(:user) }
   let(:article_reaction) { create(:reaction, reactable: article, user: user2) }
   let(:user3) { create(:user) }
 
   def reaction_data(reaction)
-    {
-      reactable_id: reaction.reactable_id,
-      reactable_type: reaction.reactable_type,
-      reactable_user_id: reaction.reactable.user_id
-    }
+    Notifications::Reactions::ReactionData.coerce(reaction).to_h
   end
 
   context "when data is invalid" do
     it "raises an exception" do
-      invalid_data = reaction_data(article_reaction).except(:reactable_id)
+      invalid_data = reaction_data(article_reaction).except("reactable_id")
       expect do
         described_class.call(invalid_data, user)
       end.to raise_error(Notifications::Reactions::ReactionData::DataError)
@@ -34,6 +31,7 @@ RSpec.describe Notifications::Reactions::Send, type: :service do
     it "creates a correct notification" do
       result = described_class.call(reaction_data(article_reaction), user)
       notification = Notification.find(result.notification_id)
+      expect(notification.subforem_id).to eq(subforem.id)
       expect(notification.user_id).to eq(user.id)
       expect(notification.notifiable).to eq(article)
     end
@@ -50,7 +48,7 @@ RSpec.describe Notifications::Reactions::Send, type: :service do
 
   context "when a reaction is persisted and has siblings" do
     before do
-      create(:reaction, reactable: article, user: user3, created_at: Time.current - 1.day)
+      create(:reaction, reactable: article, user: user3, created_at: 1.day.ago)
     end
 
     it "creates a notification" do
@@ -116,7 +114,7 @@ RSpec.describe Notifications::Reactions::Send, type: :service do
 
   context "when a reaction is destroyed" do
     let(:destroyed_reaction) { article_reaction.destroy }
-    let(:notification) { create(:notification, user: user, notifiable: article, action: "Reaction") }
+    let(:notification) { create(:notification, user: user, notifiable: article, action: "Reaction", subforem_id: subforem.id) }
 
     it "doesn't change notifications count" do
       expect do
@@ -171,6 +169,23 @@ RSpec.describe Notifications::Reactions::Send, type: :service do
       result = described_class.call(reaction_data(destroyed_reaction), user)
       expect(result.action).to eq(:saved)
       expect(result.notification_id).to eq(notification.id)
+    end
+  end
+
+  # regression test for #16627 and #16570
+  context "when a found reaction has unexpected json data" do
+    let(:existing_notification) do
+      create(
+        :notification,
+        json_data: { user: {}, article: {} },
+        action: "Reaction",
+        user: user,
+      )
+    end
+
+    it "does not raise error" do
+      reaction = create(:reaction, reactable: existing_notification.notifiable)
+      expect { described_class.call(reaction_data(reaction), user) }.not_to raise_error
     end
   end
 

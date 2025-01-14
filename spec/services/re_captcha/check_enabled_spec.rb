@@ -5,7 +5,7 @@ RSpec.describe ReCaptcha::CheckEnabled, type: :request do
   let(:recent_user) { create(:user) }
   let(:older_user) { create(:user, created_at: 3.months.ago) }
   let(:trusted_user) { create(:user, :trusted) }
-  let(:vomitted_user) do
+  let(:vomited_user) do
     user = create(:user, created_at: 3.months.ago)
     create(:vomit_reaction, category: "vomit", reactable: user, user: trusted_user, status: "confirmed")
     user
@@ -14,8 +14,7 @@ RSpec.describe ReCaptcha::CheckEnabled, type: :request do
   describe "ReCaptcha for user actions like Abuse Reports (FeedbackMessages)" do
     context "when recaptcha Settings::General keys are not configured" do
       it "marks ReCaptcha as not enabled regardless of the param passed in" do
-        allow(Settings::Authentication).to receive(:recaptcha_site_key).and_return(nil)
-        allow(Settings::Authentication).to receive(:recaptcha_secret_key).and_return(nil)
+        allow(Settings::Authentication).to receive_messages(recaptcha_site_key: nil, recaptcha_secret_key: nil)
 
         expect(described_class.call).to be(false)
         expect(described_class.call(older_user)).to be(false)
@@ -24,8 +23,8 @@ RSpec.describe ReCaptcha::CheckEnabled, type: :request do
 
     context "when recaptcha Settings::General keys are configured" do
       before do
-        allow(Settings::Authentication).to receive(:recaptcha_site_key).and_return("someSecretKey")
-        allow(Settings::Authentication).to receive(:recaptcha_secret_key).and_return("someSiteKey")
+        allow(Settings::Authentication).to receive_messages(recaptcha_site_key: "someSecretKey",
+                                                            recaptcha_secret_key: "someSiteKey")
       end
 
       it "marks ReCaptcha as enabled when logged out (parameter is nil)" do
@@ -48,8 +47,8 @@ RSpec.describe ReCaptcha::CheckEnabled, type: :request do
       end
 
       it "marks ReCaptcha as enabled when user with vomits is logged in" do
-        sign_in vomitted_user
-        expect(described_class.call(vomitted_user)).to be(true)
+        sign_in vomited_user
+        expect(described_class.call(vomited_user)).to be(true)
       end
 
       it "marks ReCaptcha as enabled when a suspended user is logged in" do
@@ -57,6 +56,13 @@ RSpec.describe ReCaptcha::CheckEnabled, type: :request do
         sign_in older_user
         expect(described_class.call(older_user)).to be(true)
         older_user.remove_role(:suspended)
+      end
+
+      it "marks ReCaptcha as enabled when a spam user is logged in" do
+        older_user.add_role(:spam)
+        sign_in older_user
+        expect(described_class.call(older_user)).to be(true)
+        older_user.remove_role(:spam)
       end
     end
   end

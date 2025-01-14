@@ -7,7 +7,7 @@ import {
   select,
 } from '@storybook/addon-knobs';
 import { action } from '@storybook/addon-actions';
-import notes from './buttons.md';
+import notes from './buttons.mdx';
 import { Button } from '@crayons';
 import '../../storybook-utilities/designSystem.scss';
 
@@ -20,7 +20,7 @@ const commonProps = {
 };
 
 export default {
-  title: 'Components/Buttons',
+  title: 'Deprecated/Buttons',
   decorator: [withKnobs],
   parameters: {
     notes,
@@ -86,9 +86,7 @@ export const Default = () => (
   </Button>
 );
 
-Default.story = {
-  name: 'Buttons',
-};
+Default.storyName = 'Buttons';
 
 export const ButtonWithIcon = () => {
   const Icon = () => (
@@ -162,6 +160,4 @@ export const ButtonWithIcon = () => {
   );
 };
 
-ButtonWithIcon.story = {
-  name: 'Buttons with Icon',
-};
+ButtonWithIcon.storyName = 'Buttons with Icon';

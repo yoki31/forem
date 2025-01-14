@@ -1,15 +1,13 @@
 class MessagePolicy < ApplicationPolicy
   def create?
-    !user_suspended?
+    !user.spam_or_suspended?
   end
 
   def destroy?
     user_sender?
   end
 
-  def update?
-    destroy?
-  end
+  alias update? destroy?
 
   def permitted_attributes_for_update
     %i[message_markdown]

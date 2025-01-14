@@ -2,16 +2,16 @@ module Articles
   class Builder
     LINE_BREAK = "\n".freeze
 
+    def self.call(...)
+      new(...).call
+    end
+
     def initialize(user, tag, prefill)
       @user = user
       @tag = tag
       @prefill = prefill
 
       @editor_version2 = @user&.setting&.editor_version == "v2"
-    end
-
-    def self.call(...)
-      new(...).call
     end
 
     # the Builder returns a pair of [article, needs_authorization?]
@@ -82,8 +82,11 @@ module Articles
     end
 
     def user_editor_v1
+      published_at = Time.current.strftime("%Y-%m-%d %H:%M %z")
+      published_at_str = FeatureFlag.enabled?(:schedule_articles) ? "# published_at: #{published_at}\n" : ""
       body = "---\ntitle: \npublished: false\ndescription: " \
-             "\ntags: \n//cover_image: https://direct_url_to_image.jpg\n---\n\n"
+             "\ntags: \n# cover_image: https://direct_url_to_image.jpg" \
+             "\n# Use a ratio of 100:42 for best results.\n#{published_at_str}---\n\n"
 
       Article.new(
         body_markdown: body,

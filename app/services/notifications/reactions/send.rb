@@ -4,21 +4,22 @@ module Notifications
     class Send
       Response = Struct.new(:action, :notification_id)
 
+      def self.call(...)
+        new(...).call
+      end
+
       # @param reaction_data [Hash]
       #   * :reactable_id [Integer] - article or comment id
       #   * :reactable_type [String] - "Article" or "Comment"
       #   * :reactable_user_id [Integer] - user id
+      #   * :reactable_subforem_id [Integer] - subforem id
       # @param receiver [User] or [Organization]
       def initialize(reaction_data, receiver)
-        @reaction = reaction_data.is_a?(ReactionData) ? reaction_data : ReactionData.new(reaction_data)
+        @reaction = ReactionData.coerce(reaction_data)
         @receiver = receiver
       end
 
       delegate :user_data, to: Notifications
-
-      def self.call(...)
-        new(...).call
-      end
 
       # @return [OpenStruct, #action, #notification_id]
       def call
@@ -37,6 +38,7 @@ module Notifications
         notification_params = {
           notifiable_type: reaction.reactable_type,
           notifiable_id: reaction.reactable_id,
+          subforem_id: reaction.reactable_subforem_id,
           action: "Reaction"
         }
         case receiver
@@ -46,7 +48,7 @@ module Notifications
           notification_params[:organization_id] = receiver.id
         end
 
-        if aggregated_reaction_siblings.size.zero?
+        if aggregated_reaction_siblings.empty?
           Notification.where(notification_params).delete_all
           Response.new(:deleted)
         else
@@ -54,11 +56,9 @@ module Notifications
 
           json_data = reaction_json_data(recent_reaction, aggregated_reaction_siblings)
 
-          previous_siblings_size = 0
           notification = Notification.find_or_initialize_by(notification_params)
 
-          old_json_data = notification.json_data
-          previous_siblings_size = notification.json_data["reaction"]["aggregated_siblings"].size if old_json_data
+          previous_siblings_size = notification.json_data&.dig("reaction", "aggregated_siblings")&.size || 0
 
           notification.json_data = json_data
           notification.notified_at = Time.current

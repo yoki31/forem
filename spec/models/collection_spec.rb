@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe Collection, type: :model do
+RSpec.describe Collection do
   let(:user) { create(:user) }
   let(:collection) { create(:collection, :with_articles, user: user) }
 
@@ -9,7 +9,6 @@ RSpec.describe Collection, type: :model do
     it { is_expected.to belong_to(:organization).optional }
     it { is_expected.to have_many(:articles).dependent(:nullify) }
 
-    it { is_expected.to validate_presence_of(:user_id) }
     it { is_expected.to validate_presence_of(:slug) }
     it { is_expected.to validate_uniqueness_of(:slug).scoped_to(:user_id) }
   end

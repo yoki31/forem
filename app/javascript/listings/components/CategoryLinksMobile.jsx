@@ -1,8 +1,6 @@
-/*
-  global selectNavigation
-*/
 import { h, Component } from 'preact';
 import PropTypes from 'prop-types';
+import { selectNavigation } from '../../packs/initializers/initializeDashboardSort';
 
 export class CategoryLinksMobile extends Component {
   componentDidMount() {
@@ -26,6 +24,7 @@ export class CategoryLinksMobile extends Component {
           {categories.map((category) => {
             return (
               <option
+                key={category.slug}
                 value={`/listings/${category.slug}`}
                 selected={category.slug === selectedCategory}
               >

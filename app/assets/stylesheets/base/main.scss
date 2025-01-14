@@ -57,7 +57,7 @@ body {
 }
 
 a {
-  color: var(--link-brand-color);
+  color: var(--link-branded-color);
   text-decoration: none;
 }
 
@@ -69,14 +69,31 @@ a {
 
   display: inline-flex;
   flex-shrink: 0;
-  align-self: stretch;
+  align-self: center;
   align-items: center;
   vertical-align: middle;
   color: var(--base-100);
   text-decoration: none;
-  letter-spacing: -0.01em;
-  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+  line-height: 1;
+  outline: 0;
+
+  // overflow-wrap: anywhere isn't supported in Safari, in which case this fallback applies
+  overflow-wrap: break-word;
   overflow-wrap: anywhere;
+
+  &__img,
+  svg {
+    max-width: 100%;
+    width: auto;
+    height: calc(
+      var(--header-height) - var(--su-2) * 2
+    ); // making calculations instead of setting fixed value so should be smooth change if we ever decide to change header's height.
+    object-fit: contain;
+    vertical-align: middle;
+    display: inline-block;
+    outline: 0;
+  }
 
   @media (min-width: $breakpoint-s) {
     --max-width: 150px;
@@ -93,16 +110,13 @@ a {
     --font-size: var(--fs-xl);
   }
 
-  &:hover {
+  &:hover,
+  .js-focus-visible &.focus-visible:focus {
     color: var(--base-80);
-    text-decoration: none;
+    text-decoration: underline;
   }
 
-  svg {
-    max-width: 100%;
-    width: auto;
-    height: calc(var(--header-height) - var(--su-2) * 2);
-    vertical-align: middle;
-    display: inline-block;
+  .js-focus-visible &.focus-visible:focus {
+    box-shadow: var(--focus-ring);
   }
 }

@@ -1,10 +1,10 @@
 import { h } from 'preact';
 import { action } from '@storybook/addon-actions';
-import notes from '../../form-elements.md';
+import notes from '../../form-elements.mdx';
 import { FormField, RadioButton } from '@crayons';
 
 export default {
-  title: 'Components/Form Components/Form Field',
+  title: 'Components/Form Elements/Form Field',
   parameters: { notes },
 };
 
@@ -21,6 +21,4 @@ export const RadioVariant = () => (
   </FormField>
 );
 
-RadioVariant.story = {
-  name: 'radio',
-};
+RadioVariant.storyName = 'radio';

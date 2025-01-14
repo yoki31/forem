@@ -1,9 +1,6 @@
 class VideosController < ApplicationController
   after_action :verify_authorized, except: %i[index]
   before_action :set_cache_control_headers, only: %i[index]
-  before_action :authorize_video, only: %i[new create]
-
-  def new; end
 
   def index
     @video_articles = Article.with_video
@@ -15,17 +12,18 @@ class VideosController < ApplicationController
     set_surrogate_key_header "videos", Article.table_key, @video_articles.map(&:record_key)
   end
 
+  def new
+    authorize :video
+  end
+
   def create
+    authorize :video
     @article = ArticleWithVideoCreationService.new(article_params, current_user).create!
 
     redirect_to "#{@article.path}/edit"
   end
 
   private
-
-  def authorize_video
-    authorize :video
-  end
 
   def article_params
     params.require(:article).permit(:video)

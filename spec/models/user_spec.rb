@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe User, type: :model do
+RSpec.describe User do
   def user_from_authorization_service(service_name, signed_in_resource = nil, cta_variant = "navbar_basic")
     auth = OmniAuth.config.mock_auth[service_name]
     Authentication::Authenticator.call(
@@ -33,77 +33,89 @@ RSpec.describe User, type: :model do
 
   before do
     omniauth_mock_providers_payload
+    allow(SegmentedUserRefreshWorker).to receive(:perform_async)
     allow(Settings::Authentication).to receive(:providers).and_return(Authentication::Providers.available)
+  end
+
+  describe "delegations" do
+    it { is_expected.to delegate_method(:admin?).to(:authorizer) }
+    it { is_expected.to delegate_method(:any_admin?).to(:authorizer) }
+    it { is_expected.to delegate_method(:auditable?).to(:authorizer) }
+    it { is_expected.to delegate_method(:banished?).to(:authorizer) }
+    it { is_expected.to delegate_method(:comment_suspended?).to(:authorizer) }
+    it { is_expected.to delegate_method(:creator?).to(:authorizer) }
+    it { is_expected.to delegate_method(:has_trusted_role?).to(:authorizer) }
+    it { is_expected.to delegate_method(:podcast_admin_for?).to(:authorizer) }
+    it { is_expected.to delegate_method(:restricted_liquid_tag_for?).to(:authorizer) }
+    it { is_expected.to delegate_method(:single_resource_admin_for?).to(:authorizer) }
+    it { is_expected.to delegate_method(:super_admin?).to(:authorizer) }
+    it { is_expected.to delegate_method(:support_admin?).to(:authorizer) }
+    it { is_expected.to delegate_method(:suspended?).to(:authorizer) }
+    it { is_expected.to delegate_method(:spam?).to(:authorizer) }
+    it { is_expected.to delegate_method(:spam_or_suspended?).to(:authorizer) }
+    it { is_expected.to delegate_method(:tag_moderator?).to(:authorizer) }
+    it { is_expected.to delegate_method(:tech_admin?).to(:authorizer) }
+    it { is_expected.to delegate_method(:trusted?).to(:authorizer) }
+    it { is_expected.to delegate_method(:user_subscription_tag_available?).to(:authorizer) }
+    it { is_expected.to delegate_method(:vomited_on?).to(:authorizer) }
+    it { is_expected.to delegate_method(:warned?).to(:authorizer) }
   end
 
   describe "validations" do
     describe "builtin validations" do
       subject { user }
 
-      it { is_expected.to have_one(:profile).dependent(:destroy) }
-      it { is_expected.to have_one(:notification_setting).dependent(:destroy) }
-      it { is_expected.to have_one(:setting).dependent(:destroy) }
+      it { is_expected.to have_one(:profile).dependent(:delete) }
+      it { is_expected.to have_one(:notification_setting).dependent(:delete) }
+      it { is_expected.to have_one(:setting).dependent(:delete) }
 
-      it { is_expected.to have_many(:access_grants).class_name("Doorkeeper::AccessGrant").dependent(:delete_all) }
-      it { is_expected.to have_many(:access_tokens).class_name("Doorkeeper::AccessToken").dependent(:delete_all) }
-      it { is_expected.to have_many(:ahoy_events).class_name("Ahoy::Event").dependent(:destroy) }
-      it { is_expected.to have_many(:ahoy_visits).class_name("Ahoy::Visit").dependent(:destroy) }
-      it { is_expected.to have_many(:api_secrets).dependent(:destroy) }
+      it { is_expected.to have_many(:ahoy_events).class_name("Ahoy::Event").dependent(:delete_all) }
+      it { is_expected.to have_many(:ahoy_visits).class_name("Ahoy::Visit").dependent(:delete_all) }
+      it { is_expected.to have_many(:api_secrets).dependent(:delete_all) }
       it { is_expected.to have_many(:articles).dependent(:destroy) }
       it { is_expected.to have_many(:audit_logs).dependent(:nullify) }
-      it { is_expected.to have_many(:badge_achievements).dependent(:destroy) }
+      it { is_expected.to have_many(:badge_achievements).dependent(:delete_all) }
       it { is_expected.to have_many(:badges).through(:badge_achievements) }
       it { is_expected.to have_many(:collections).dependent(:destroy) }
       it { is_expected.to have_many(:comments).dependent(:destroy) }
       it { is_expected.to have_many(:credits).dependent(:destroy) }
-      it { is_expected.to have_many(:discussion_locks).dependent(:destroy) }
-      it { is_expected.to have_many(:display_ad_events).dependent(:destroy) }
+      it { is_expected.to have_many(:discussion_locks).dependent(:delete_all) }
+      it { is_expected.to have_many(:billboard_events).dependent(:nullify) }
       it { is_expected.to have_many(:email_authorizations).dependent(:delete_all) }
       it { is_expected.to have_many(:email_messages).class_name("Ahoy::Message").dependent(:destroy) }
+      it { is_expected.to have_many(:feed_events).dependent(:nullify) }
       it { is_expected.to have_many(:field_test_memberships).class_name("FieldTest::Membership").dependent(:destroy) }
       it { is_expected.to have_many(:github_repos).dependent(:destroy) }
       it { is_expected.to have_many(:html_variants).dependent(:destroy) }
-      it { is_expected.to have_many(:identities).dependent(:destroy) }
+      it { is_expected.to have_many(:identities).dependent(:delete_all) }
       it { is_expected.to have_many(:identities_enabled) }
       it { is_expected.to have_many(:listings).dependent(:destroy) }
-      it { is_expected.to have_many(:mentions).dependent(:destroy) }
-      it { is_expected.to have_many(:notes).dependent(:destroy) }
-      it { is_expected.to have_many(:notification_subscriptions).dependent(:destroy) }
-      it { is_expected.to have_many(:notifications).dependent(:destroy) }
-      it { is_expected.to have_many(:organization_memberships).dependent(:destroy) }
+      it { is_expected.to have_many(:mentions).dependent(:delete_all) }
+      it { is_expected.to have_many(:notes).dependent(:delete_all) }
+      it { is_expected.to have_many(:notification_subscriptions).dependent(:delete_all) }
+      it { is_expected.to have_many(:notifications).dependent(:delete_all) }
+      it { is_expected.to have_many(:organization_memberships).dependent(:delete_all) }
       it { is_expected.to have_many(:organizations).through(:organization_memberships) }
       it { is_expected.to have_many(:page_views).dependent(:nullify) }
-      it { is_expected.to have_many(:podcast_episode_appearances).dependent(:destroy) }
+      it { is_expected.to have_many(:podcast_episode_appearances).dependent(:delete_all) }
       it { is_expected.to have_many(:podcast_episodes).through(:podcast_episode_appearances).source(:podcast_episode) }
-      it { is_expected.to have_many(:podcast_ownerships).dependent(:destroy) }
+      it { is_expected.to have_many(:podcast_ownerships).dependent(:delete_all) }
       it { is_expected.to have_many(:podcasts_owned).through(:podcast_ownerships).source(:podcast) }
-      it { is_expected.to have_many(:poll_skips).dependent(:destroy) }
-      it { is_expected.to have_many(:poll_votes).dependent(:destroy) }
+      it { is_expected.to have_many(:poll_skips).dependent(:delete_all) }
+      it { is_expected.to have_many(:poll_votes).dependent(:delete_all) }
       it { is_expected.to have_many(:profile_pins).dependent(:delete_all) }
       it { is_expected.to have_many(:rating_votes).dependent(:nullify) }
       it { is_expected.to have_many(:reactions).dependent(:destroy) }
-      it { is_expected.to have_many(:response_templates).dependent(:destroy) }
+      it { is_expected.to have_many(:response_templates).dependent(:delete_all) }
       it { is_expected.to have_many(:source_authored_user_subscriptions).dependent(:destroy) }
+      it { is_expected.to have_many(:segmented_users).dependent(:destroy) }
+      it { is_expected.to have_many(:audience_segments).through(:segmented_users) }
       it { is_expected.to have_many(:subscribed_to_user_subscriptions).dependent(:destroy) }
       it { is_expected.to have_many(:subscribers).dependent(:destroy) }
       it { is_expected.to have_many(:tweets).dependent(:nullify) }
-      it { is_expected.to have_many(:webhook_endpoints).class_name("Webhook::Endpoint").dependent(:delete_all) }
+      it { is_expected.to have_many(:languages).dependent(:delete_all) }
 
       # rubocop:disable RSpec/NamedSubject
-      it do
-        expect(subject).to have_many(:access_grants)
-          .class_name("Doorkeeper::AccessGrant")
-          .with_foreign_key("resource_owner_id")
-          .dependent(:delete_all)
-      end
-
-      it do
-        expect(subject).to have_many(:access_tokens)
-          .class_name("Doorkeeper::AccessToken")
-          .with_foreign_key("resource_owner_id")
-          .dependent(:delete_all)
-      end
-
       it do
         expect(subject).to have_many(:affected_feedback_messages)
           .class_name("FeedbackMessage")
@@ -173,16 +185,12 @@ RSpec.describe User, type: :model do
       it { is_expected.not_to allow_value("AcMe_1%").for(:username) }
       it { is_expected.to allow_value("AcMe_1").for(:username) }
 
-      it { is_expected.not_to allow_value("$example.com/value\x1F").for(:payment_pointer) }
-      it { is_expected.not_to allow_value("example.com/value").for(:payment_pointer) }
-      it { is_expected.to allow_value(" $example.com/value ").for(:payment_pointer) }
-      it { is_expected.to allow_value(nil).for(:payment_pointer) }
-      it { is_expected.to allow_value("").for(:payment_pointer) }
-
       it { is_expected.to validate_length_of(:email).is_at_most(50).allow_nil }
       it { is_expected.to validate_length_of(:name).is_at_most(100).is_at_least(1) }
       it { is_expected.to validate_length_of(:password).is_at_most(100).is_at_least(8) }
       it { is_expected.to validate_length_of(:username).is_at_most(30).is_at_least(2) }
+
+      it { is_expected.not_to allow_value("  ").for(:name) }
 
       it { is_expected.to validate_presence_of(:articles_count) }
       it { is_expected.to validate_presence_of(:badge_achievements_count) }
@@ -203,7 +211,7 @@ RSpec.describe User, type: :model do
       context "when evaluating the custom error message for username uniqueness" do
         subject { create(:user, username: "test_user_123") }
 
-        it { is_expected.to validate_uniqueness_of(:username).with_message("test_user_123 is taken.").case_insensitive }
+        it { is_expected.to validate_uniqueness_of(:username).with_message("has already been taken").case_insensitive }
       end
       # rubocop:enable RSpec/NestedGroups
 
@@ -216,7 +224,7 @@ RSpec.describe User, type: :model do
       create(:user, username: "test_user_123")
       same_username = build(:user, username: "test_user_123")
       expect(same_username).not_to be_valid
-      expect(same_username.errors[:username].to_s).to include("test_user_123 is taken.")
+      expect(same_username.errors[:username].to_s).to include("has already been taken")
     end
 
     it "validates username against reserved words" do
@@ -296,7 +304,7 @@ RSpec.describe User, type: :model do
       it "sets email to nil if empty" do
         user.email = ""
         user.validate!
-        expect(user.email).to eq(nil)
+        expect(user.email).to be_nil
       end
 
       it "does not change a valid name" do
@@ -307,10 +315,16 @@ RSpec.describe User, type: :model do
     end
 
     describe "#username" do
-      it "receives a temporary username if none is given" do
+      it "receives a generated username if none is given" do
         user.username = ""
         user.validate!
         expect(user.username).not_to be_blank
+      end
+
+      it "is not valid if generate_username returns nil" do
+        user.username = ""
+        allow(user).to receive(:generate_username).and_return(nil)
+        expect(user).not_to be_valid
       end
 
       it "does not allow to change to a username that is taken" do
@@ -321,23 +335,6 @@ RSpec.describe User, type: :model do
       it "does not allow to change to a username that is taken by an organization" do
         user.username = create(:organization).slug
         expect(user).not_to be_valid
-      end
-    end
-
-    context "when the past value is relevant" do
-      let(:user) { create(:user) }
-
-      it "changes old_username and old_old_username properly if username changes" do
-        old_username = user.username
-        random_new_username = "username_#{rand(100_000_000)}"
-        user.update(username: random_new_username)
-        expect(user.username).to eq(random_new_username)
-        expect(user.old_username).to eq(old_username)
-
-        new_username = user.username
-        user.update(username: "username_#{rand(100_000_000)}")
-        expect(user.old_username).to eq(new_username)
-        expect(user.old_old_username).to eq(old_username)
       end
     end
   end
@@ -370,6 +367,13 @@ RSpec.describe User, type: :model do
         end
         expect(new_user.reload.notifications.count).to eq(0)
       end
+    end
+
+    it "refreshes user segments" do
+      expect(user).to be_persisted
+      expect(SegmentedUserRefreshWorker).not_to have_received(:perform_async)
+      user.update name: "New Name Here"
+      expect(SegmentedUserRefreshWorker).to have_received(:perform_async).with(user.id)
     end
   end
 
@@ -419,11 +423,19 @@ RSpec.describe User, type: :model do
     end
   end
 
+  context "when a new role is added" do
+    let(:without_role) { create(:user, roles: []) }
+
+    it "refreshes user segments" do
+      without_role.add_role :trusted
+      expect(SegmentedUserRefreshWorker).to have_received(:perform_async).with(without_role.id)
+    end
+  end
+
   describe "user registration", vcr: { cassette_name: "fastly_sloan" } do
     let(:user) { create(:user) }
 
     before do
-      allow(FeatureFlag).to receive(:enabled?).with(:forem_passport).and_return(true)
       omniauth_mock_providers_payload
     end
 
@@ -453,7 +465,7 @@ RSpec.describe User, type: :model do
       it "does not assign signup_cta_variant to non-new users for #{provider_name}" do
         returning_user = create(:user, signup_cta_variant: nil)
         new_user = user_from_authorization_service(provider_name, returning_user, "hey-hey-hey")
-        expect(new_user.signup_cta_variant).to be(nil)
+        expect(new_user.signup_cta_variant).to be_nil
       end
 
       it "assigns proper social username based on authentication for #{provider_name}" do
@@ -463,7 +475,7 @@ RSpec.describe User, type: :model do
         case provider_name
         when :apple
           expect(new_user.username).to match(/valid_username_\w+/)
-        when :facebook
+        when :facebook, :google_oauth2
           expect(new_user.username).to match(/fname_lname_\S*\z/)
         else
           expect(new_user.username).to eq("valid_username")
@@ -472,7 +484,7 @@ RSpec.describe User, type: :model do
 
       it "marks registered_at for newly registered user" do
         new_user = user_from_authorization_service(provider_name, nil, "navbar_basic")
-        expect(new_user.registered_at).not_to be nil
+        expect(new_user.registered_at).not_to be_nil
       end
 
       it "assigns modified username if the username is invalid for #{provider_name}" do
@@ -482,7 +494,7 @@ RSpec.describe User, type: :model do
         case provider_name
         when :apple
           expect(new_user.username).to match(/invalidusername_\w+/)
-        when :facebook
+        when :facebook, :google_oauth2
           expect(new_user.username).to match(/fname_lname_\S*\z/)
         else
           expect(new_user.username).to eq("invalidusername")
@@ -539,36 +551,10 @@ RSpec.describe User, type: :model do
   end
 
   describe "spam" do
-    before do
-      allow(Settings::General).to receive(:mascot_user_id).and_return(user.id)
-      allow(Settings::RateLimit).to receive(:spam_trigger_terms).and_return(
-        ["yahoomagoo gogo", "testtestetest", "magoo.+magee"],
-      )
-    end
+    it "delegates spam handling to Spam::Handler.handle_user!" do
+      allow(Spam::Handler).to receive(:handle_user!).with(user: user).and_call_original
 
-    it "creates vomit reaction if possible spam" do
-      user.name = "Hi my name is Yahoomagoo gogo"
       user.save
-      expect(Reaction.last.category).to eq("vomit")
-      expect(Reaction.last.reactable_id).to eq(user.id)
-    end
-
-    it "creates vomit reaction if possible spam based on pattern" do
-      user.name = "Hi my name is magoo to the magee"
-      user.save
-      expect(Reaction.last.category).to eq("vomit")
-      expect(Reaction.last.reactable_id).to eq(user.id)
-    end
-
-    it "does not create vomit reaction if does not have matching title" do
-      user.save
-      expect(Reaction.last).to be nil
-    end
-
-    it "does not create vomit reaction if does not have pattern match" do
-      user.name = "Hi my name is magoo to"
-      user.save
-      expect(Reaction.last).to be nil
     end
   end
 
@@ -639,7 +625,7 @@ RSpec.describe User, type: :model do
 
     it "creates proper body class with defaults" do
       # rubocop:disable Layout/LineLength
-      classes = "light-theme sans-serif-article-body trusted-status-#{user.trusted} #{user.setting.config_navbar}-header"
+      classes = "light-theme sans-serif-article-body mod-status-#{user.admin? || !user.moderator_for_tags.empty?} trusted-status-#{user.trusted?} #{user.setting.config_navbar}-header"
       # rubocop:enable Layout/LineLength
       expect(user.decorate.config_body_class).to eq(classes)
     end
@@ -648,7 +634,7 @@ RSpec.describe User, type: :model do
       user.setting.config_font = "sans_serif"
 
       # rubocop:disable Layout/LineLength
-      classes = "light-theme sans-serif-article-body trusted-status-#{user.trusted} #{user.setting.config_navbar}-header"
+      classes = "light-theme sans-serif-article-body mod-status-#{user.admin? || !user.moderator_for_tags.empty?} trusted-status-#{user.trusted?} #{user.setting.config_navbar}-header"
       # rubocop:enable Layout/LineLength
       expect(user.decorate.config_body_class).to eq(classes)
     end
@@ -657,7 +643,7 @@ RSpec.describe User, type: :model do
       user.setting.config_font = "open_dyslexic"
 
       # rubocop:disable Layout/LineLength
-      classes = "light-theme open-dyslexic-article-body trusted-status-#{user.trusted} #{user.setting.config_navbar}-header"
+      classes = "light-theme open-dyslexic-article-body mod-status-#{user.admin? || !user.moderator_for_tags.empty?} trusted-status-#{user.trusted?} #{user.setting.config_navbar}-header"
       # rubocop:enable Layout/LineLength
       expect(user.decorate.config_body_class).to eq(classes)
     end
@@ -665,8 +651,73 @@ RSpec.describe User, type: :model do
     it "creates proper body class with dark theme" do
       user.setting.config_theme = "dark_theme"
 
-      classes = "dark-theme sans-serif-article-body trusted-status-#{user.trusted} #{user.setting.config_navbar}-header"
+      # rubocop:disable Layout/LineLength
+      classes = "dark-theme sans-serif-article-body mod-status-#{user.admin? || !user.moderator_for_tags.empty?} trusted-status-#{user.trusted?} #{user.setting.config_navbar}-header ten-x-hacker-theme"
+      # rubocop:enable Layout/LineLength
       expect(user.decorate.config_body_class).to eq(classes)
+    end
+  end
+
+  describe "#set_initial_roles!" do
+    it "adds creator roles if waiting on first user" do
+      allow(Settings::General).to receive(:waiting_on_first_user).and_return(true)
+
+      user = create(:user)
+      user.set_initial_roles!
+
+      expect(user).to be_creator
+      expect(user).to be_super_admin
+      expect(user).to be_trusted
+      expect(user).not_to be_limited
+    end
+
+    it "does not add any roles if not waiting on first user" do
+      user = create(:user)
+      user.set_initial_roles!
+
+      expect(user).not_to be_creator
+      expect(user).not_to be_super_admin
+      expect(user).not_to be_trusted
+      expect(user).not_to be_limited
+    end
+
+    it "adds the limited role to a new user if the new user status setting is limited" do
+      allow(Settings::Authentication).to receive(:new_user_status).and_return("limited")
+
+      user = create(:user)
+      user.set_initial_roles!
+
+      expect(user).not_to be_creator
+      expect(user).not_to be_super_admin
+      expect(user).not_to be_trusted
+      expect(user).to be_limited
+    end
+
+    it "does not change any roles if the user is not a new user" do
+      create(:user, :trusted, email: "trusted-user@forem.test")
+
+      # Now considered an already existing record to ActiveRecord
+      user = described_class.find_by(email: "trusted-user@forem.test")
+      expect(UserRole.count).to eq(1)
+
+      expect { user.set_initial_roles! }.not_to change(UserRole, :count)
+      expect(user).to be_trusted
+    end
+
+    it "does not change any roles if the user is not valid" do
+      user = create(:user, :tag_moderator)
+      expect(UserRole.count).to eq(1)
+
+      user.username = ""
+      expect { user.set_initial_roles! }.not_to change(UserRole, :count)
+      expect(user).to be_tag_moderator
+    end
+
+    it "does nothing if the user has not been persisted" do
+      user = build(:user)
+      expect(UserRole.count).to eq(0)
+
+      expect { user.set_initial_roles! }.not_to change(UserRole, :count)
     end
   end
 
@@ -676,6 +727,14 @@ RSpec.describe User, type: :model do
 
       user.calculate_score
       expect(user.score).to eq(30)
+    end
+
+    it "calculates a score of -500 if spam" do
+      user.add_role(:spam)
+      user.update_column(:badge_achievements_count, 3)
+
+      user.calculate_score
+      expect(user.score).to eq(-470)
     end
   end
 
@@ -696,13 +755,18 @@ RSpec.describe User, type: :model do
       expect(user.reload.following_orgs_count).to eq(1)
     end
 
-    it "returns cached ids of articles that have been saved to their readinglist" do
+    it "returns cached ids of published articles that have been saved to their readinglist" do
       article = create(:article)
       article2 = create(:article)
+      article3 = create(:article)
+
       create(:reading_reaction, user: user, reactable: article)
       create(:reading_reaction, user: user, reactable: article2)
+      create(:reading_reaction, user: user, reactable: article3)
 
-      expect(user.cached_reading_list_article_ids).to eq([article2.id, article.id])
+      Articles::Unpublish.call(article2.user, article2)
+
+      expect(user.cached_reading_list_article_ids).to eq([article3.id, article.id])
     end
   end
 
@@ -828,23 +892,179 @@ RSpec.describe User, type: :model do
     end
   end
 
-  describe "#trusted" do
-    it "memoizes the result from rolify" do
-      allow(Rails.cache)
-        .to receive(:fetch)
-        .with("user-#{user.id}/has_trusted_role", expires_in: 200.hours)
-        .and_return(false)
-        .once
-
-      2.times { user.trusted }
-    end
-  end
-
   describe "profiles" do
     it "automatically creates a profile for new users", :aggregate_failures do
       user = create(:user)
       expect(user.profile).to be_present
       expect(user.profile).to respond_to(:location)
+    end
+  end
+
+  describe "#last_activity" do
+    it "determines a user's last activity" do
+      Timecop.freeze do
+        user = create(:user, last_comment_at: 1.minute.ago)
+        expect(user.last_activity).to eq(Time.zone.now)
+      end
+    end
+  end
+
+  describe ".recently_active" do
+    let(:early) { build(:user) }
+    let(:later) { build(:user) }
+
+    before do
+      later.save!
+
+      Timecop.travel(5.days.ago) do
+        early.save!
+      end
+    end
+
+    it "returns the most recently updated" do
+      results = described_class.recently_active(1)
+      expect(results).to contain_exactly(later)
+    end
+  end
+
+  describe "#currently_following_tags" do
+    before do
+      allow(Tag).to receive(:followed_by)
+    end
+
+    it "calls Tag.followed_by" do
+      user.currently_following_tags
+      expect(Tag).to have_received(:followed_by).with(user)
+    end
+  end
+
+  describe "#has_no_published_content?" do
+    it "returns true if the user has no published articles or comments" do
+      create(:article, user_id: user.id, published: false, published_at: Date.tomorrow)
+      expect(user.has_no_published_content?).to be(true)
+    end
+
+    it "returns false if the user has any published articles or comments" do
+      create(:article, user_id: user.id, published: true)
+      expect(user.has_no_published_content?).to be(false)
+    end
+  end
+
+  describe ".above_average and .average_x_count" do
+    context "when there are not yet any articles with score above 0" do
+      it "works as expected" do
+        expect(described_class.average_articles_count).to be_within(0.1).of(0.0)
+        expect(described_class.average_comments_count).to be_within(0.1).of(0.0)
+        users = described_class.above_average
+        expect(users.pluck(:articles_count)).to eq([])
+        expect(users.pluck(:comments_count)).to eq([])
+      end
+    end
+
+    context "when there are users with articles_count" do
+      before do
+        create(:user, articles_count: 10)
+        create(:user, articles_count: 6)
+        create(:user, articles_count: 4)
+        create(:user, articles_count: 1)
+        # averages 5.25
+      end
+
+      it "works as expected" do
+        expect(described_class.average_articles_count).to be_within(0.1).of(5.25)
+        articles = described_class.above_average
+        expect(articles.pluck(:articles_count)).to contain_exactly(10, 6)
+      end
+    end
+
+    context "when there are users with comments_count" do
+      before do
+        create(:user, comments_count: 5)
+        create(:user, comments_count: 4)
+        create(:user, comments_count: 3)
+        create(:user, comments_count: 2)
+        # averages 3.5
+      end
+
+      it "works as expected" do
+        expect(described_class.average_comments_count).to be_within(0.1).of(3.5)
+        articles = described_class.above_average
+        # average is decimal but gets floored by the query builder
+        expect(articles.pluck(:comments_count)).to contain_exactly(5, 4, 3)
+      end
+    end
+  end
+
+  describe "#generate_social_images" do
+    before do
+      create(:article, user: user)
+      allow(Images::SocialImageWorker).to receive(:perform_async)
+    end
+
+    context "when the name or profile_image has changed and the user has articles" do
+      it "calls SocialImageWorker.perform_async" do
+        user.name = "New name for this user!"
+        user.save
+        expect(Images::SocialImageWorker).to have_received(:perform_async)
+      end
+    end
+
+    context "when the name or profile_image has not changed or the user has no articles" do
+      it "does not call SocialImageWorker.perform_async" do
+        user.save
+        expect(Images::SocialImageWorker).not_to have_received(:perform_async)
+      end
+    end
+  end
+
+  context "when indexing with Algolia", :algolia do
+    it "indexes the user on create" do
+      allow(AlgoliaSearch::SearchIndexWorker).to receive(:perform_async)
+      create(:user)
+      expect(AlgoliaSearch::SearchIndexWorker).to have_received(:perform_async).with("User", kind_of(Integer), 
+false).once
+    end
+
+    it "updates user index if user's name has changed" do
+      user = create(:user)
+      allow(AlgoliaSearch::SearchIndexWorker).to receive(:perform_async)
+      user.update(name: "New Name")
+      expect(AlgoliaSearch::SearchIndexWorker).to have_received(:perform_async).with("User", user.id, false).once
+    end
+
+    describe "#bad_actor_or_empty_profile?" do
+      it "returns false to a regular user" do
+        user = build(:user, articles_count: 1)
+        expect(user.bad_actor_or_empty_profile?).to be(false)
+      end
+
+      it "returns true if no content" do
+        user = build(:user)
+        expect(user.bad_actor_or_empty_profile?).to be(true)
+      end
+
+      it "returns true if the user has negative score" do
+        user = build(:user, score: -500)
+        expect(user.bad_actor_or_empty_profile?).to be(true)
+      end
+
+      it "returns true if the user has spam role" do
+        user = build(:user)
+        user.add_role(:spam)
+        expect(user.bad_actor_or_empty_profile?).to be(true)
+      end
+
+      it "return true if user is suspended" do
+        user = build(:user)
+        user.add_role(:suspended)
+        expect(user.bad_actor_or_empty_profile?).to be(true)
+      end
+
+      it "return true if user is banished" do
+        user = build(:user)
+        allow(user).to receive(:banished?).and_return(true)
+        expect(user.bad_actor_or_empty_profile?).to be(true)
+      end
     end
   end
 end

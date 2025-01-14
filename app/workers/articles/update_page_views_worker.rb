@@ -1,16 +1,22 @@
 module Articles
   class UpdatePageViewsWorker
-    include Sidekiq::Worker
+    include Sidekiq::Job
+
+    GOOGLE_REFERRER = "https://www.google.com/".freeze
 
     sidekiq_options queue: :medium_priority,
                     lock: :until_executing,
                     on_conflict: :replace,
                     retry: false
 
+    # @see Articles::PageViewUpdater
     def perform(create_params)
+      article = Article.find_by(id: create_params["article_id"])
+      return unless article&.published?
+      return if create_params[:user_id] && article.user_id == create_params[:user_id]
+
       PageView.create!(create_params)
 
-      article = Article.find(create_params["article_id"])
       updated_count = article.page_views.sum(:counts_for_number_of_views)
       if updated_count > article.page_views_count
         article.update_column(:page_views_count, updated_count)
@@ -22,6 +28,10 @@ module Articles
       # updates vs. organic page view updates. We kept a similar relationship
       # between the two workers, this one here is schedule after 2 minutes,
       # organic page view updates after 25 minutes.
+
+      # We also don't need to call this unless the new pageview is organic
+      return unless create_params["referrer"] == GOOGLE_REFERRER
+
       Articles::UpdateOrganicPageViewsWorker.perform_at(
         25.minutes.from_now,
         article.id,

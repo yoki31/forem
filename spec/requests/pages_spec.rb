@@ -1,6 +1,11 @@
 require "rails_helper"
 
-RSpec.describe "Pages", type: :request do
+RSpec.describe "Pages" do
+  after do
+    # Make sure we reset this to avoid polluting any subsequent tests
+    RequestStore.store[:subforem_id] = nil
+  end
+
   describe "GET /:slug" do
     it "has proper headline for non-top-level" do
       page = create(:page, title: "Edna O'Brien96")
@@ -9,12 +14,53 @@ RSpec.describe "Pages", type: :request do
       expect(response.body).to include("/page/#{page.slug}")
     end
 
-    it "has proper headline for top-level" do
+    it "has proper headline and classes for top-level" do
       page = create(:page, title: "Edna O'Brien96", is_top_level_path: true)
       get "/#{page.slug}"
       expect(response.body).to include(CGI.escapeHTML(page.title))
       expect(response.body).not_to include("/page/#{page.slug}")
       expect(response.body).to include("stories-show")
+      expect(response.body).to include(" pageslug-#{page.slug}")
+    end
+
+    context "when redirect_if_different_subforem is triggered" do
+      let(:subforem) { create(:subforem) }
+      let!(:page) { create(:page, slug: "some-page", subforem_id: subforem.id) }
+
+      context "when RequestStore.store[:subforem_id] is set and differs" do
+
+        it "redirects to the subforem-based URL" do
+          get "/page/#{page.slug}", headers: { "Host" => create(:subforem, domain: "other.com").domain }
+
+          expect(response).to have_http_status(:redirect)
+        end
+      end
+
+      context "when RequestStore.store[:subforem_id] matches the page" do
+        before do
+          RequestStore.store[:subforem_id] = 42
+        end
+
+        it "does not redirect" do
+          get "/page/#{page.slug}"
+          expect(response).to have_http_status(:ok)
+          expect(response.body).to include(CGI.escapeHTML(page.title))
+        end
+      end
+
+      context "when RequestStore.store[:subforem_id] or page.subforem_id is nil" do
+        it "does not redirect if page.subforem_id is nil" do
+          page.update!(subforem_id: nil)
+          get "/page/#{page.slug}"
+          expect(response).to have_http_status(:ok)
+        end
+
+        it "does not redirect if RequestStore.store[:subforem_id] is nil" do
+          RequestStore.store[:subforem_id] = nil
+          get "/page/#{page.slug}"
+          expect(response).to have_http_status(:ok)
+        end
+      end
     end
 
     context "when json template" do
@@ -42,6 +88,63 @@ RSpec.describe "Pages", type: :request do
         expect(response.media_type).to eq("application/json")
         expect(response.body).to include(json_text)
       end
+    end
+  end
+
+  describe "GET /:slug.txt" do
+    it "renders proper text file when template is txt" do
+      page = create(:page, title: "Text page", body_html: "This is a test", template: "txt")
+      get "/#{page.slug}.txt"
+      expect(response.body).to include(page.processed_html)
+      expect(response.media_type).to eq("text/plain")
+    end
+
+    it "renders not found when .txt request does not have txt template" do
+      page = create(:page, title: "Text page", body_html: "This is a test", template: "contained")
+      expect { get "/#{page.slug}.txt" }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+  end
+
+  describe "GET /slug/slug/slug/etc." do
+    it "renders proper page when slug has one subdirectory" do
+      page = create(:page, slug: "first-slug/second-slug", is_top_level_path: true)
+      get "/#{page.slug}"
+      expect(response.body).to include(CGI.escapeHTML(page.title))
+    end
+
+    it "renders proper page when slug has two subdirectories" do
+      page = create(:page, slug: "first-slug/second-slug/third-slug", is_top_level_path: true)
+      get "/#{page.slug}"
+      expect(response.body).to include(CGI.escapeHTML(page.title))
+    end
+
+    it "renders proper page when slug has three subdirectories" do
+      page = create(:page, slug: "first-slug/second-slug/third-slug/fourth-slug", is_top_level_path: true)
+      get "/#{page.slug}"
+      expect(response.body).to include(CGI.escapeHTML(page.title))
+    end
+
+    it "renders proper page when slug has four subdirectories" do
+      page = create(:page, slug: "first-slug/second-slug/third-slug/fourth-slug/fifth-slug", is_top_level_path: true)
+      get "/#{page.slug}"
+      expect(response.body).to include(CGI.escapeHTML(page.title))
+    end
+
+    it "renders proper page when slug has five subdirectories" do
+      page = create(:page, slug: "first-slug/second-slug/third-slug/fourth-slug/fifth-slug/sixth-slug",
+                           is_top_level_path: true)
+      get "/#{page.slug}"
+      expect(response.body).to include(CGI.escapeHTML(page.title))
+    end
+
+    it "returns not found when five directories, but no page" do
+      # 6+ directories will be a non-valid page, so just further testing routing error
+      expect { get "/heyhey/hey/hey/hey/hey" }.to raise_error(ActiveRecord::RecordNotFound)
+    end
+
+    it "returns routing error when 7+ directories" do
+      # 6+ directories will be a non-valid page, so just further testing routing error
+      expect { get "/heyhey/hey/hey/hey/hey/hey/hey" }.to raise_error(ActionController::RoutingError)
     end
   end
 
@@ -128,7 +231,7 @@ RSpec.describe "Pages", type: :request do
 
     it "redirects to the latest welcome thread" do
       earlier_welcome_thread = create(:article, user: user, tags: "welcome")
-      earlier_welcome_thread.update(published_at: Time.current - 1.week)
+      earlier_welcome_thread.update(published_at: 1.week.ago)
       latest_welcome_thread = create(:article, user: user, tags: "welcome")
       get "/welcome"
 
@@ -160,7 +263,7 @@ RSpec.describe "Pages", type: :request do
 
     it "redirects to the latest challenge thread" do
       earlier_challenge_thread = create(:article, user: user, tags: "challenge")
-      earlier_challenge_thread.update(published_at: Time.current - 1.week)
+      earlier_challenge_thread.update(published_at: 1.week.ago)
       latest_challenge_thread = create(:article, user: user, tags: "challenge")
       get "/challenge"
 
@@ -216,14 +319,6 @@ RSpec.describe "Pages", type: :request do
 
         expect(response.body).to redirect_to("/hijacked/staff")
       end
-    end
-  end
-
-  describe "GET /badge" do
-    it "has proper headline" do
-      html_variant = create(:html_variant, group: "badge_landing_page", published: true, approved: true)
-      get "/badge"
-      expect(response.body).to include(html_variant.html)
     end
   end
 

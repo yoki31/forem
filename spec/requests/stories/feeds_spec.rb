@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Stories::Feeds", type: :request do
+RSpec.describe "Stories::Feeds" do
   let(:title) { "My post" }
   let(:user) { create(:user, name: "Josh") }
   let(:organization) { create(:organization, name: "JoshCo") }
@@ -30,36 +30,38 @@ RSpec.describe "Stories::Feeds", type: :request do
       )
     end
 
-    it "returns feed when feed_strategy is basic" do
-      allow(Settings::UserExperience).to receive(:feed_strategy).and_return("basic")
+    context "when there are no params passed (base feed) and user is NOT signed in" do
+      it "returns feed when feed_strategy is basic" do
+        allow(Settings::UserExperience).to receive(:feed_strategy).and_return("basic")
 
-      get stories_feed_path
+        get stories_feed_path
 
-      expect(response_article).to include(
-        "id" => article.id,
-        "title" => title,
-        "user_id" => user.id,
-        "user" => hash_including("name" => user.name),
-        "organization_id" => organization.id,
-        "organization" => hash_including("name" => organization.name),
-        "tag_list" => article.decorate.cached_tag_list_array,
-      )
-    end
+        expect(response_article).to include(
+          "id" => article.id,
+          "title" => title,
+          "user_id" => user.id,
+          "user" => hash_including("name" => user.name),
+          "organization_id" => organization.id,
+          "organization" => hash_including("name" => organization.name),
+          "tag_list" => article.decorate.cached_tag_list_array,
+        )
+      end
 
-    it "returns feed when feed_strategy is optimized" do
-      allow(Settings::UserExperience).to receive(:feed_strategy).and_return("optimized")
+      it "returns feed when feed_strategy is large_forem_experimental" do
+        allow(Settings::UserExperience).to receive(:feed_strategy).and_return("large_forem_experimental")
 
-      get stories_feed_path
+        get stories_feed_path
 
-      expect(response_article).to include(
-        "id" => article.id,
-        "title" => title,
-        "user_id" => user.id,
-        "user" => hash_including("name" => user.name),
-        "organization_id" => organization.id,
-        "organization" => hash_including("name" => organization.name),
-        "tag_list" => article.decorate.cached_tag_list_array,
-      )
+        expect(response_article).to include(
+          "id" => article.id,
+          "title" => title,
+          "user_id" => user.id,
+          "user" => hash_including("name" => user.name),
+          "organization_id" => organization.id,
+          "organization" => hash_including("name" => organization.name),
+          "tag_list" => article.decorate.cached_tag_list_array,
+        )
+      end
     end
 
     context "when rendering an article that is pinned" do
@@ -135,7 +137,7 @@ RSpec.describe "Stories::Feeds", type: :request do
 
         get timeframe_stories_feed_path(:week)
 
-        expect(Articles::Feeds::Timeframe).to have_received(:call).with("week", page: nil, tag: nil)
+        expect(Articles::Feeds::Timeframe).to have_received(:call).with("week", page: 1, tag: nil)
       end
 
       it "calls the feed service for latest" do
@@ -169,8 +171,8 @@ RSpec.describe "Stories::Feeds", type: :request do
         )
       end
 
-      it "returns feed when feed_strategy is optimized" do
-        allow(Settings::UserExperience).to receive(:feed_strategy).and_return("optimized")
+      it "returns feed when feed_strategy is large_forem_experimental" do
+        allow(Settings::UserExperience).to receive(:feed_strategy).and_return("large_forem_experimental")
 
         get stories_feed_path
 
@@ -186,14 +188,6 @@ RSpec.describe "Stories::Feeds", type: :request do
       end
     end
 
-    context "when there are no params passed (base feed) and user is not signed in" do
-      it "does not set a field test" do
-        expect do
-          get stories_feed_path
-        end.not_to change(FieldTest::Membership, :count)
-      end
-    end
-
     context "when there are highly rated comments" do
       let(:comment) { create(:comment, score: 20, user: user) }
       let(:article) { comment.commentable }
@@ -203,6 +197,157 @@ RSpec.describe "Stories::Feeds", type: :request do
 
         expect(response_article["top_comments"]).not_to be_nil
         expect(response_article["top_comments"].first["username"]).not_to be_nil
+      end
+    end
+
+    context "when there are low-scoring articles" do
+      let!(:article) { create(:article, featured: false) }
+
+      it "excludes low-score article but not mid-score" do
+        article_with_mid_score = create(:article, score: Settings::UserExperience.home_feed_minimum_score)
+        article_with_low_score = create(:article, score: Articles::Feeds::Latest::MINIMUM_SCORE)
+
+        get timeframe_stories_feed_path(:latest)
+
+        response_array = response.parsed_body.pluck("title")
+        expect(response_array).to contain_exactly(article.title, article_with_mid_score.title)
+        expect(response_array).not_to include(article_with_low_score.title)
+      end
+    end
+
+    context "when user is signed in and requests 'latest following' feed" do
+      let(:followed_user) { create(:user) }
+      let(:unfollowed_user) { create(:user) }
+      let!(:followed_article) { create(:article, user: followed_user) }
+      let!(:unfollowed_article) { create(:article, user: unfollowed_user) }
+
+      before do
+        sign_in user
+        user.follow(followed_user)
+      end
+
+      it "returns articles from followed users only" do
+        get stories_feed_path(type_of: "following", timeframe: "latest")
+
+        response_article_ids = response.parsed_body.map { |a| a["id"] }
+        expect(response_article_ids).to include(followed_article.id)
+        expect(response_article_ids).not_to include(unfollowed_article.id)
+      end
+
+      it "returns empty array if no followed users have articles" do
+        Article.delete_all
+        get stories_feed_path(type_of: "following", timeframe: "latest")
+
+        expect(response.parsed_body).to be_empty
+      end
+
+      it "does not return articles if user is not following anyone" do
+        user.stop_following(followed_user)
+        get stories_feed_path(type_of: "following", timeframe: "latest")
+
+        expect(response.parsed_body).to be_empty
+      end
+
+      it "does not return articles from unfollowed users" do
+        get stories_feed_path(type_of: "following", timeframe: "latest")
+
+        response_article_ids = response.parsed_body.map { |a| a["id"] }
+        expect(response_article_ids).not_to include(unfollowed_article.id)
+      end
+    end
+
+    context "when user is not signed in and requests 'latest following' feed" do
+      let(:followed_user) { create(:user) }
+      let!(:followed_article) { create(:article, user: followed_user) }
+
+      it "returns default latest feed" do
+        get stories_feed_path(type_of: "following", timeframe: "latest")
+
+        response_article_ids = response.parsed_body.map { |a| a["id"] }
+        expect(response_article_ids).to include(article.id)
+        expect(response_article_ids).to include(followed_article.id)
+      end
+    end
+
+    context "when user is signed in and requests 'following' feed" do
+      let(:followed_user) { create(:user) }
+      let(:unfollowed_user) { create(:user) }
+      let!(:followed_article) { create(:article, user: followed_user) }
+      let!(:unfollowed_article) { create(:article, user: unfollowed_user) }
+
+      before do
+        sign_in user
+        user.follow(followed_user)
+      end
+
+      context "and timeframe is not 'latest'" do
+        it "returns articles from followed users only" do
+          get stories_feed_path(type_of: "following")
+
+          response_article_ids = response.parsed_body.map { |a| a["id"] }
+          expect(response_article_ids).to include(followed_article.id)
+          expect(response_article_ids).not_to include(unfollowed_article.id)
+        end
+
+        it "returns empty array if no followed users have articles" do
+          Article.delete(followed_article.id)
+          get stories_feed_path(type_of: "following")
+
+          expect(response.parsed_body).to be_empty
+        end
+
+        it "does not return articles if user is not following anyone" do
+          user.stop_following(followed_user)
+          get stories_feed_path(type_of: "following")
+
+          expect(response.parsed_body).to be_empty
+        end
+
+        it "does not return articles from unfollowed users" do
+          get stories_feed_path(type_of: "following")
+
+          response_article_ids = response.parsed_body.map { |a| a["id"] }
+          expect(response_article_ids).not_to include(unfollowed_article.id)
+        end
+      end
+
+      context "and timeframe is 'latest'" do
+        it "returns articles from followed users only" do
+          get stories_feed_path(type_of: "following", timeframe: "latest")
+
+          response_article_ids = response.parsed_body.map { |a| a["id"] }
+          expect(response_article_ids).to include(followed_article.id)
+          expect(response_article_ids).not_to include(unfollowed_article.id)
+        end
+      end
+    end
+
+    context "when user is signed in and requests 'following' feed with 'discover' type_of" do
+      let(:another_user) { create(:user) }
+      let!(:another_article) { create(:article, user: another_user) }
+
+      before do
+        sign_in user
+        user.follow(another_user)
+      end
+
+      it "returns articles from followed users and others when type_of is 'discover'" do
+        get stories_feed_path(type_of: "discover")
+
+        response_article_ids = response.parsed_body.map { |a| a["id"] }
+        expect(response_article_ids).to include(article.id, another_article.id)
+      end
+    end
+
+    context "when user is not signed in and requests 'following' feed" do
+      let(:followed_user) { create(:user) }
+      let!(:followed_article) { create(:article, user: followed_user) }
+
+      it "returns default signed-out feed" do
+        get stories_feed_path(type_of: "following")
+
+        response_article_ids = response.parsed_body.map { |a| a["id"] }
+        expect(response_article_ids).to include(article.id, followed_article.id)
       end
     end
   end

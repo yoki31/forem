@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "CommentsDestroy", type: :request do
+RSpec.describe "CommentsDestroy" do
   let(:user) { create(:user) }
   let(:article) { create(:article, user_id: user.id) }
 
@@ -43,7 +43,7 @@ RSpec.describe "CommentsDestroy", type: :request do
       end
 
       it "marks the comment as deleted" do
-        expect(Comment.first.deleted).to eq(true)
+        expect(Comment.first.deleted).to be(true)
       end
 
       it "renders [deleted]" do

@@ -1,6 +1,13 @@
 import { h, render } from 'preact';
 import ahoy from 'ahoy.js';
 import { TagsFollowed } from '../leftSidebar/TagsFollowed';
+import {
+  observeBillboards,
+  initializeBillboardVisibility,
+} from '../packs/billboardAfterRenderActions';
+import { observeFeedElements } from '../packs/feedEvents';
+import { setupBillboardInteractivity } from '@utilities/billboardInteractivity';
+import { trackCreateAccountClicks } from '@utilities/ahoy/trackEvents';
 
 /* global userData */
 // This logic is similar to that in initScrolling.js.erb
@@ -11,6 +18,8 @@ const frontPageFeedPathNames = new Map([
   ['/top/year', 'year'],
   ['/top/infinity', 'infinity'],
   ['/latest', 'latest'],
+  ['/following', ''],
+  ['/following/latest', 'latest']
 ]);
 
 /**
@@ -56,42 +65,54 @@ function trackTagCogIconClicks() {
     });
 }
 
+function removeLocalePath(pathname) {
+  return pathname.replace(/^\/locale\/[a-zA-Z-]+\/?/, '/');
+}
+
 function renderSidebar() {
   const sidebarContainer = document.getElementById('sidebar-wrapper-right');
-  const { pathname } = window.location;
+  const pathname = removeLocalePath(window.location.pathname);
 
   // If the screen's width is less than 640 we don't need this extra data.
   if (
     sidebarContainer &&
     screen.width >= 640 &&
-    (pathname === '/' || pathname === '/latest' || pathname.includes('/top/'))
+    (pathname === '/' || pathname === '/latest' || pathname.includes('/top/') || pathname.includes('/discover') || pathname.includes('/following'))
   ) {
     window
       .fetch('/sidebars/home')
       .then((res) => res.text())
       .then((response) => {
         sidebarContainer.innerHTML = response;
+        setupBillboardInteractivity();
       });
   }
 }
 
 const feedTimeFrame = frontPageFeedPathNames.get(window.location.pathname);
+const homeFeedEl = document.getElementById('homepage-feed');
 
-if (!document.getElementById('featured-story-marker')) {
+if (document.getElementById('sidebar-nav-followed-tags')) {
   const waitingForDataLoad = setInterval(() => {
     const { user = null, userStatus } = document.body.dataset;
     if (userStatus === 'logged-out') {
       return;
     }
 
-    if (userStatus === 'logged-in' && user !== null) {
+    if (userStatus === 'logged-in' && user !== null && homeFeedEl) {
       clearInterval(waitingForDataLoad);
       if (document.getElementById('rendered-article-feed')) {
         return;
       }
       import('./homePageFeed').then(({ renderFeed }) => {
-        // We have user data, render followed tags.
-        renderFeed(feedTimeFrame);
+        const callback = () => {
+          initializeBillboardVisibility();
+          observeBillboards();
+          setupBillboardInteractivity();
+          observeFeedElements();
+        };
+
+        renderFeed(feedTimeFrame, callback);
 
         InstantClick.on('change', () => {
           const { userStatus: currentUserStatus } = document.body.dataset;
@@ -107,7 +128,14 @@ if (!document.getElementById('featured-story-marker')) {
             return;
           }
 
-          renderFeed(changedFeedTimeFrame);
+          const callback = () => {
+            initializeBillboardVisibility();
+            observeBillboards();
+            setupBillboardInteractivity();
+            observeFeedElements();
+          };
+
+          renderFeed(changedFeedTimeFrame, callback);
         });
       });
 
@@ -127,3 +155,5 @@ InstantClick.on('change', () => {
   renderSidebar();
 });
 InstantClick.init();
+
+trackCreateAccountClicks('sidebar-wrapper-left');

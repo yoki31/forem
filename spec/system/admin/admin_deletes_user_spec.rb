@@ -1,17 +1,17 @@
 require "rails_helper"
 
-RSpec.describe "Admin deletes user", type: :system do
+RSpec.describe "Admin deletes user" do
   let(:admin) { create(:user, :super_admin) }
   let(:user) { create(:user) }
 
   before do
     sign_in admin
-    visit edit_admin_user_path(user.id)
+    visit admin_user_path(user.id)
   end
 
   it "enqueues a job for deleting the user" do
     sidekiq_assert_enqueued_jobs(1, only: Users::DeleteWorker) do
-      click_button "☠️ Fully Delete User & All Activity ☠️"
+      click_button "Delete now"
     end
 
     message = "@#{user.username} (email: #{user.email}, user_id: #{user.id}) has been fully deleted."
@@ -23,7 +23,7 @@ RSpec.describe "Admin deletes user", type: :system do
     user.update(email: nil)
 
     sidekiq_perform_enqueued_jobs do
-      click_button "☠️ Fully Delete User & All Activity ☠️"
+      click_button "Delete now"
     end
 
     message = "@#{user.username} (email: no email, user_id: #{user.id}) has been fully deleted."

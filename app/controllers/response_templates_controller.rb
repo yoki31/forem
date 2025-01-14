@@ -6,18 +6,22 @@ class ResponseTemplatesController < ApplicationController
   MOD_TYPES = %w[mod_comment tag_adjustment].freeze
   ADMIN_TYPES = %w[email_reply abuse_report_email_reply].freeze
 
+  # This endpoint is called to provide a mix of personal & mod_comment templates
+  # when replying to a comment, it also might be called for Email and Abuse
+  # Report Email templates. To be compatible with both uses, it returns a Hash
+  # sometimes and an array at other times. When type_of is present, this returns
+  # an array of templates. When the type_of param is missing, this returns a
+  # hash, keys are type_ofs, values are an array of templates.
   def index
-    raise ArgumentError, "Missing param type_of" if params[:type_of].blank?
-
-    user_id = params[:type_of] == "personal_comment" ? current_user.id : nil
-    @response_templates = ResponseTemplate.where(type_of: params[:type_of], user_id: user_id)
+    @response_templates = policy_scope(ResponseTemplate).group_by(&:type_of)
+    @response_templates = @response_templates.fetch(params[:type_of], []) if params[:type_of].present?
 
     if MOD_TYPES.include?(params[:type_of])
-      authorize @response_templates, :moderator_index?
+      authorize :response_template, :moderator_index?
     elsif ADMIN_TYPES.include?(params[:type_of])
-      authorize @response_templates, :admin_index?
+      authorize :response_template, :admin_index?
     else
-      authorize @response_templates, :index?
+      authorize :response_template, :index?
     end
 
     respond_to do |format|
@@ -27,16 +31,41 @@ class ResponseTemplatesController < ApplicationController
 
   def create
     authorize ResponseTemplate
-    response_template.user_id = current_user.id
+
+    unless tries_to_create_a_mod_response_template? && can_create_mod_response_templates?
+      response_template.user_id = current_user.id
+      response_template.type_of = "personal_comment"
+    end
     response_template.content_type = "body_markdown"
-    response_template.type_of = "personal_comment"
 
     if response_template.save
-      flash[:settings_notice] = "Your response template \"#{response_template.title}\" was created."
+      flash[:settings_notice] =
+        I18n.t("response_templates_controller.created", title: response_template.title)
       redirect_to user_settings_path(tab: "response-templates", id: response_template.id)
     else
-      flash[:error] = "Response template error: #{response_template.errors_as_sentence}"
+      flash[:error] =
+        I18n.t("response_templates_controller.response_template_error", errors: response_template.errors_as_sentence)
       attributes = permitted_attributes(ResponseTemplate)
+      redirect_to user_settings_path(
+        tab: "response-templates",
+        id: response_template.id,
+        previous_title: attributes[:title],
+        previous_content: attributes[:content],
+      )
+    end
+  end
+
+  def update
+    authorize response_template
+
+    attributes = permitted_attributes(ResponseTemplate)
+    if response_template.update(attributes)
+      flash[:settings_notice] =
+        I18n.t("response_templates_controller.updated", title: response_template.title)
+      redirect_to user_settings_path(tab: "response-templates", id: response_template.id)
+    else
+      flash[:error] =
+        I18n.t("response_templates_controller.response_template_error", errors: response_template.errors_as_sentence)
       redirect_to user_settings_path(
         tab: "response-templates",
         id: response_template.id,
@@ -50,7 +79,8 @@ class ResponseTemplatesController < ApplicationController
     authorize response_template
 
     if response_template.destroy
-      flash[:settings_notice] = "Your response template \"#{response_template.title}\" was deleted."
+      flash[:settings_notice] =
+        I18n.t("response_templates_controller.deleted", title: response_template.title)
     else
       flash[:error] = response_template.errors_as_sentence # this will probably never fail
     end
@@ -58,25 +88,19 @@ class ResponseTemplatesController < ApplicationController
     redirect_to user_settings_path(tab: "response-templates")
   end
 
-  def update
-    authorize response_template
+  private
 
-    attributes = permitted_attributes(ResponseTemplate)
-    if response_template.update(attributes)
-      flash[:settings_notice] = "Your response template \"#{response_template.title}\" was updated."
-      redirect_to user_settings_path(tab: "response-templates", id: response_template.id)
-    else
-      flash[:error] = "Response template error: #{response_template.errors_as_sentence}"
-      redirect_to user_settings_path(
-        tab: "response-templates",
-        id: response_template.id,
-        previous_title: attributes[:title],
-        previous_content: attributes[:content],
-      )
-    end
+  def authorized_user
+    @authorized_user ||= Authorizer.for(user: current_user)
   end
 
-  private
+  def can_create_mod_response_templates?
+    authorized_user.accesses_mod_response_templates?
+  end
+
+  def tries_to_create_a_mod_response_template?
+    params[:response_template][:type_of] == "mod_comment"
+  end
 
   def response_template
     @response_template ||= if params[:id].present?

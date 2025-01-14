@@ -1,3 +1,6 @@
+#  @note When we destroy the related user, it's using dependent:
+#        :delete for the relationship.  That means no before/after
+#        destroy callbacks will be called on this object.
 class Profile < ApplicationRecord
   belongs_to :user
 
@@ -36,11 +39,13 @@ class Profile < ApplicationRecord
   # Lazily add accessors for profile fields on first use
   def method_missing(method_name, *args, **kwargs, &block)
     match = method_name.match(ATTRIBUTE_NAME_REGEX)
+    super unless match
+
     field = ProfileField.find_by(attribute_name: match[:attribute_name])
     super unless field
 
     self.class.instance_eval do
-      store_attribute :data, field.attribute_name.to_sym, :string
+      store_accessor :data, field.attribute_name.to_sym
     end
     public_send(method_name, *args, **kwargs, &block)
   end
@@ -50,7 +55,7 @@ class Profile < ApplicationRecord
   # an explicit `responds_to?` check.
   def respond_to_missing?(method_name, include_private = false)
     match = method_name.match(ATTRIBUTE_NAME_REGEX)
-    return true if match[:attribute_name].in?(self.class.attributes)
+    return true if match && match[:attribute_name].in?(self.class.attributes)
 
     super
   end

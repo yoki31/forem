@@ -1,10 +1,13 @@
 import { h } from 'preact';
-import '../../../storybook-utilities/designSystem.scss';
-import notes from '../../avatars-and-logos.md';
+import notes from '../../avatars-and-logos.mdx';
 
 export default {
-  title: 'Components/Avatars & Logos/Logos/HTML',
-  parameters: { notes },
+  title: 'Components/Avatars & Logos/Logos',
+  parameters: {
+    docs: {
+      page: notes,
+    },
+  },
 };
 
 export const Default = () => (
@@ -17,7 +20,7 @@ export const Default = () => (
   </span>
 );
 
-Default.story = { name: 'default (small)' };
+Default.storyName = 'default (small)';
 
 export const Large = () => (
   <span className="crayons-logo crayons-logo--l">
@@ -29,7 +32,7 @@ export const Large = () => (
   </span>
 );
 
-Large.story = { name: 'large' };
+Large.storyName = 'large';
 
 export const ExtraLarge = () => (
   <span className="crayons-logo crayons-logo--xl">
@@ -41,7 +44,7 @@ export const ExtraLarge = () => (
   </span>
 );
 
-ExtraLarge.story = { name: 'extra large' };
+ExtraLarge.storyName = 'extra large';
 
 export const DoubleXL = () => (
   <span className="crayons-logo crayons-logo--2xl">
@@ -53,7 +56,7 @@ export const DoubleXL = () => (
   </span>
 );
 
-DoubleXL.story = { name: '2XL' };
+DoubleXL.storyName = '2XL';
 
 export const TripleXL = () => (
   <span className="crayons-logo crayons-logo--3xl">
@@ -65,4 +68,4 @@ export const TripleXL = () => (
   </span>
 );
 
-TripleXL.story = { name: '3XL' };
+TripleXL.storyName = '3XL';

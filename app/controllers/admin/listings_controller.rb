@@ -1,6 +1,5 @@
 module Admin
   class ListingsController < Admin::ApplicationController
-    include ListingsToolkit
     ALLOWED_PARAMS = %i[
       published body_markdown title category listing_category_id tag_list action organization_id
     ].freeze
@@ -22,17 +21,22 @@ module Admin
     def update
       @listing = Listing.find(params[:id])
       handle_publish_status if listing_params[:published]
-      bump_listing(@listing.cost) if listing_params[:action] == "bump"
-      update_listing_details
-      clear_listings_cache
-      flash[:success] = "Listing updated successfully"
+
+      if listing_params[:action] == "bump"
+        bump_success = Listings::Bump.call(@listing, user: current_user)
+        return process_no_credit_left unless bump_success
+      end
+
+      @listing.update(listing_params.compact)
+      @listing.clear_cache
+      flash[:success] = I18n.t("admin.listings_controller.updated")
       redirect_to edit_admin_listing_path(@listing)
     end
 
     def destroy
       @listing = Listing.find(params[:id])
       @listing.destroy
-      flash[:warning] = "'#{@listing.title}' was destroyed successfully"
+      flash[:warning] = I18n.t("admin.listings_controller.destroyed", title: @listing.title)
       redirect_to admin_listings_path
     end
 
@@ -45,12 +49,16 @@ module Admin
     end
 
     def handle_publish_status
-      unpublish_listing if listing_params[:published] == "0"
-      publish_listing if listing_params[:published] == "1"
+      @listing.unpublish if listing_params[:published] == "0"
+      @listing.publish if listing_params[:published] == "1"
     end
 
     def include_unpublished?
       params[:include_unpublished] == "1"
+    end
+
+    def process_no_credit_left
+      redirect_to admin_listings_path, notice: I18n.t("admin.listings_controller.no_credit")
     end
   end
 end

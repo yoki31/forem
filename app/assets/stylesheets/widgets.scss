@@ -278,88 +278,144 @@
     }
   }
 }
-// Sidebar sponsors
-.sidebar-sponsor {
-  color: var(--card-color-tertiary);
-  img {
-    width: 100%;
-    max-width: 140px;
-    margin-bottom: var(--su-2);
-  }
-}
 
-// Left Side bar navigation links
-// Pulling this out of context because Nick says so: https://github.com/thepracticaldev/dev.to/pull/5918/commits/f1642e62accbdaff72dc7762e1e1ffd4e40027b0
-.sidebar-nav-element {
-  display: block;
+.org-sidebar-widget {
   position: relative;
+  overflow: hidden;
+  display: block;
 
-  a {
-    display: block;
-    overflow-x: hidden;
-    text-overflow: ellipsis;
-  }
-
-  @media screen and (min-width: $breakpoint-m) {
-    .sidebar-nav-link-follow {
-      display: none;
+  .org-sidebar-widget-body {
+    padding: 16px;
+    overflow-wrap: break-word;
+    &.body-scrollable {
+      height: calc(100vh - 300px);
+      max-height: 390px;
+      overflow-y: scroll;
     }
-    &:hover {
-      .sidebar-nav-link-follow {
-        display: block;
+    .org-sidebar-widget-user-pic {
+      display: inline-block;
+      img {
+        height: 48px;
+        width: 48px;
+        margin: 3px;
+        border-radius: 100%;
       }
     }
   }
-  img {
-    width: 30px;
-    height: 30px;
-    border: 0px;
-    vertical-align: -8px;
-    margin-right: 4px;
-  }
-  img.nav-emoji {
-    height: 19px;
-    width: 19px;
-    vertical-align: -2px;
-  }
-
-  a.sidebar-nav-link {
-    @include sidebar-link;
-    color: var(--link-color);
-    font-weight: 400;
-
-    &.sidebar-nav-link-tag {
-      color: var(--link-color);
+  a {
+    width: calc(100% - 40px);
+    justify-content: center;
+    &:hover {
+      opacity: 0.9;
     }
   }
-  a.sidebar-nav-link-follow {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
+}
+
+.org-member-page {
+  .member-item {
+    width: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+
+    .member-item-top {
+      display: flex;
+      width: 100%;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+
+      .member-user-pic {
+        img {
+          width: 48px;
+          height: 48px;
+          aspect-ratio: 1/1;
+          margin: 3px;
+          border-radius: 100%;
+        }
+      }
+    }
+
+    .member-item-bottom {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 1px;
+      flex-grow: 0;
+
+      .truncate {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      .member-username {
+        font-weight: var(--fw-normal);
+        font-size: var(--fs-s);
+        line-height: var(--lh-base);
+        letter-spacing: -0.02em;
+        color: var(--color-secondary);
+      }
+    }
   }
 }
 
-// Todo: Not really sure what that is.. some sort of sponsorship widget...
-.sidebar-sponsorship-level {
-  text-align: center;
-  font-weight: bold;
-  width: calc(100% - 6px);
-  padding: 26px 0px;
-  border-radius: 3px;
-  margin-bottom: 10px;
-  font-family: $helvetica-condensed;
-  font-stretch: condensed;
-  background: var(--card-secondary-bg);
-}
+.crayons-bb, .crayons-unit {
+  padding: var(--su-3);
+  padding-bottom: var(--su-4);
 
-.crayons-sponsorship-widget {
-  img {
+  &__header {
     width: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  &__title {
+    color: var(--label-secondary);
+    font-size: var(--fs-s);
+    line-height: var(--lh-base);
+    margin-left: var(--su-1);
+    align-self: center;
+  }
+
+  &__dropdown {
+    margin-left: auto;
+  }
+
+  img {
     height: auto;
     border-radius: var(--radius);
     display: inline-block;
     vertical-align: middle;
-    margin: 10px auto;
+    align-self: center;
+    background: var(--body-bg);
+  }
+
+  &__indicator {
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    align-self: center;
+    word-wrap: normal;
+    word-break: keep-all;
+  }
+}
+
+.crayons-article-sticky,
+.sidebar-wrapper {
+  .crayons-card {
+    .text-styles {
+      font-size: var(--fs-base);
+    }
+    &.billboard, &.bb-placement {
+      max-height: calc(
+        100vh - var(--header-height) - 2 * var(--layout-padding)
+      );
+      overflow-y: auto;
+    }
   }
 }

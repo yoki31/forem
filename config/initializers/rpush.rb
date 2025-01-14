@@ -1,9 +1,10 @@
+# rubocop:disable Metrics/BlockLength
 Rpush.configure do |config|
   # Supported clients are :active_record and :redis
   config.client = :redis
 
   # Options passed to Redis.new
-  config.redis_options = { url: ENV["REDIS_RPUSH_URL"] || ENV["REDIS_URL"], driver: :ruby }
+  config.redis_options = { url: ENV.fetch("REDIS_RPUSH_URL") { ENV.fetch("REDIS_URL", nil) }, driver: :ruby }
 
   # Frequency in seconds to check for new notifications.
   config.push_poll = 2
@@ -20,7 +21,7 @@ Rpush.configure do |config|
   # Path to log file. Relative to current directory unless absolute.
   # config.log_file = "log/rpush.log"
 
-  config.log_level = (defined?(Rails) && Rails.logger ? Rails.logger.level : ::Logger::Severity::INFO)
+  config.log_level = (defined?(Rails) && Rails.logger ? Rails.logger.level : Logger::Severity::INFO)
 
   # Define a custom logger.
   config.logger = Rails.logger
@@ -58,6 +59,7 @@ Rpush.reflect do |on|
       tags: [
         "app_bundle:#{notification.app&.bundle_id}",
         "type:#{JSON.parse(notification.payload).dig('data', 'type') || 'unknown'}",
+        "host:#{ENV.fetch('APP_DOMAIN', nil)}",
       ],
     )
   end
@@ -71,7 +73,7 @@ Rpush.reflect do |on|
       Device.ios.where(token: notification.device_token).destroy_all
     end
 
-    HoneyBadger.notify(error_message:
+    Honeybadger.notify(error_message:
       "error_description: #{notification.error_description}, error_code: #{notification.error_code}")
 
     ForemStatsClient.increment(
@@ -80,6 +82,7 @@ Rpush.reflect do |on|
         "app_bundle:#{notification.app&.bundle_id}",
         "error_code:#{notification.error_code}",
         "error_description:#{notification.error_description}",
+        "host:#{ENV.fetch('APP_DOMAIN', nil)}",
       ],
     )
   end
@@ -158,3 +161,4 @@ Rpush.reflect do |on|
   # on.error do |error|
   # end
 end
+# rubocop:enable Metrics/BlockLength

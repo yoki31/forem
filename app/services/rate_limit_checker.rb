@@ -24,12 +24,12 @@ class RateLimitChecker
   class LimitReached < StandardError
     attr_reader :retry_after
 
-    def initialize(retry_after) # rubocop:disable Lint/MissingSuper
+    def initialize(retry_after)
       @retry_after = retry_after
     end
 
     def message
-      "Rate limit reached, try again in #{retry_after} seconds"
+      I18n.t("services.rate_limit_checker.limit_reached", count: retry_after)
     end
   end
 
@@ -75,7 +75,7 @@ class RateLimitChecker
 
   def limit_cache_key(action)
     unique_key_component = @user&.id || @user&.ip_address
-    raise "Invalid Cache Key: no unique component present" if unique_key_component.blank?
+    raise I18n.t("services.rate_limit_checker.invalid_key") if unique_key_component.blank?
 
     "#{unique_key_component}_#{action}"
   end
@@ -91,13 +91,13 @@ class RateLimitChecker
 
   def check_published_article_creation_limit
     # TODO: We should make this time frame configurable.
-    user.articles.published.where("created_at > ?", 30.seconds.ago).size >
+    user.articles.published.from_subforem.where("created_at > ?", 30.seconds.ago).size >
       Settings::RateLimit.published_article_creation
   end
 
   def check_published_article_antispam_creation_limit
     # TODO: We should make this time frame configurable.
-    user.articles.published.where("created_at > ?", 5.minutes.ago).size >
+    user.articles.published.from_subforem.where("created_at > ?", 5.minutes.ago).size >
       Settings::RateLimit.published_article_antispam_creation
   end
 

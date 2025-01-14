@@ -3,7 +3,7 @@
 //= require lib/xss
 //= require initializePage
 //= require utilities/getImageForLink
-//= require honeybadger-js/dist/honeybadger.js
+//= require @honeybadger-io/js/dist/browser/honeybadger.js
 //= require i18n
 //= require ahoy.js/dist/ahoy.js
 
@@ -117,9 +117,14 @@ var instantClick
 
   function changePage(title, body, newUrl, scrollY, pop) {
     var pageContentDiv = document.getElementById("page-content");
-    var memberMenuButton = document.getElementById("member-menu-button")
+    var memberMenuButton = document.getElementById("member-menu-button");
+    var searchTypeahead = document.getElementById("search-typeahead");
     if (memberMenuButton) {
       memberMenuButton.classList.remove('showing')
+    }
+    if (searchTypeahead) {
+      document.getElementById('search-input').value = ''
+      searchTypeahead.classList.add('hidden');
     }
     document.body.replaceChild(body, pageContentDiv)
 
@@ -254,7 +259,7 @@ var instantClick
     getImageForLink(a);
   }
 
-  // If a link is focused, it is preloaded just like on mousover.
+  // If a link is focused, it is preloaded just like on mouseover.
   // It also covers the issue where a user needs to press <return>
   // twice in order to follow a focused link.
   function focusListener(e) {
@@ -419,6 +424,8 @@ var instantClick
       // a script add or delete script elements, so we need to put script
       // elements in an array to loop through them correctly.
       for (i = 0; i < scriptElementsInDOM.length; i++) {
+        // gist liquid tags are handled seperately via app/javascript/utilities/gist.js
+        if(scriptElementsInDOM[i].id === 'gist-ltag') continue;
         scriptElementsToCopy.push(scriptElementsInDOM[i])
       }
 
@@ -719,7 +726,12 @@ var instantClick
     apiKey: document.body.dataset.honeybadgerKey,
     environment: "<%= Rails.env %>",
     revision: document.body.dataset.releaseFootprint,
-    ignorePatterns: [/ResizeObserver/i, /MetaMask/i],
+  });
+
+  Honeybadger.beforeNotify(function(notice) {
+    if (!notice || typeof notice.message !== 'string') return true
+    const ignorePatterns = [/ResizeObserver/i, /MetaMask/i, /MtPopUpList/i, /ChunkLoadError/i]
+    return !(ignorePatterns.some((pattern) => pattern.test(notice.message)));
   });
 
 // INITIALIZE AHOY TRACKING

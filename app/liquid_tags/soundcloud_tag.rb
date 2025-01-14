@@ -1,5 +1,6 @@
 class SoundcloudTag < LiquidTagBase
   PARTIAL = "liquids/soundcloud".freeze
+  REGISTRY_REGEXP = %r{https?://soundcloud\.com}
 
   def initialize(_tag_name, link, _parse_context)
     super
@@ -31,13 +32,15 @@ class SoundcloudTag < LiquidTagBase
   end
 
   def valid_link?(link)
-    (link =~ %r{\Ahttps://soundcloud\.com/([a-zA-Z0-9_\-]){3,25}/(sets/)?([a-zA-Z0-9_\-]){3,255}\Z})
+    (link =~ %r{\Ahttps://soundcloud\.com/([a-zA-Z0-9_-]){3,25}/(sets/)?([a-zA-Z0-9_-]){3,255}\Z})
       &.zero?
   end
 
   def raise_error
-    raise StandardError, "Invalid Soundcloud URL - try taking off any URL params: '?something=value'"
+    raise StandardError, I18n.t("liquid_tags.soundcloud_tag.invalid_soundcloud_url")
   end
 end
 
 Liquid::Template.register_tag("soundcloud", SoundcloudTag)
+
+UnifiedEmbed.register(SoundcloudTag, regexp: SoundcloudTag::REGISTRY_REGEXP)

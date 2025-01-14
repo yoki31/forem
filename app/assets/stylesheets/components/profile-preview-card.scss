@@ -7,10 +7,13 @@
     transition-duration: var(--dropdown-transition);
     color: var(--base-100);
     padding-top: 0;
-    top: 100%;
     left: 0;
     font-size: var(--fs-base);
     font-weight: var(--fw-normal);
+
+    // overflow-wrap: anywhere isn't supported in Safari, in which case this fallback applies
+    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
   }
 
   &__content.crayons-dropdown:hover {
@@ -24,7 +27,7 @@
 
   &__trigger:hover + .profile-preview-card__content.crayons-dropdown {
     display: block;
-    animation: hoverAppear vaR(--dropdown-hover-delay);
+    animation: hoverAppear var(--dropdown-hover-delay);
 
     &.showing {
       animation: none;

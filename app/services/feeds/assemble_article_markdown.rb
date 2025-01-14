@@ -31,6 +31,13 @@ module Feeds
 
     private
 
+    def base_url
+      @base_url ||=
+        URI.parse(@item.url).then do |uri|
+          "#{uri.scheme}://#{uri.host}"
+        end
+    end
+
     def processed_title
       @title.truncate(128, omission: "...", separator: " ")
     end
@@ -43,7 +50,7 @@ module Feeds
 
     def assemble_body_markdown
       cleaned_content = Feeds::CleanHtml.call(get_content)
-      cleaned_content = thorough_parsing(cleaned_content, @feed.url)
+      cleaned_content = thorough_parsing(cleaned_content, base_url)
 
       content = ReverseMarkdown
         .convert(cleaned_content, github_flavored: true)
@@ -123,7 +130,7 @@ module Feeds
 
     def parse_and_translate_youtube_iframe!(html_doc)
       html_doc.css("iframe").each do |iframe|
-        next unless /youtube\.com/.match?(iframe.attributes["src"].value)
+        next unless iframe.attributes["src"].value.include?("youtube.com")
 
         iframe.name = "p"
         youtube_id = iframe.attributes["src"].value.scan(/embed%2F(.{4,11})/).flatten.first

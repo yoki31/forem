@@ -1,6 +1,6 @@
 
 <header class="flex items-center mb-6">
-  <h2 class="crayons-title mb-4">Listings</h2>
+  <h1 class="crayons-title">Listings</h1>
 
   <a
     href="<%= admin_listing_categories_path %>"
@@ -51,7 +51,7 @@
     <% @listings.each do |listing| %>
       <tr>
         <td><%= link_to listing.title, edit_admin_listing_path(listing.id), rel: "noopener" %></td>
-        <td><%= link_to listing.user.username, edit_admin_user_path(listing.user.id) %></td>
+        <td><%= link_to listing.user.username, admin_user_path(listing.user.id) %></td>
         <td><%= link_to listing.organization.name, admin_organization_path(listing.organization_id) if listing.organization_id.present? %></td>
         <td><%= listing.category %></td>
         <td><%= listing.cached_tag_list %></td>

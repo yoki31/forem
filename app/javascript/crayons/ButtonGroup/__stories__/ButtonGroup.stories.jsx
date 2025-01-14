@@ -9,20 +9,19 @@ export default {
 
 export const Default = () => {
   return (
-    <ButtonGroup>
+    <ButtonGroup labelText="Example group of buttons">
       <Button variant="outlined">Action 1</Button>
       <Button variant="outlined">Action 2</Button>
     </ButtonGroup>
   );
 };
 
-Default.story = {
-  name: 'Text buttons',
-};
+Default.storyName = 'Text buttons';
 
 export const TextIcon = () => {
   const Icon = () => (
     <svg
+      title="Check"
       width="24"
       height="24"
       xmlns="http://www.w3.org/2000/svg"
@@ -33,13 +32,11 @@ export const TextIcon = () => {
   );
 
   return (
-    <ButtonGroup>
+    <ButtonGroup labelText="Example group of buttons including an icon">
       <Button variant="secondary">Action 1</Button>
       <Button variant="secondary" icon={Icon} contentType="icon" />
     </ButtonGroup>
   );
 };
 
-TextIcon.story = {
-  name: 'Text button + Icon',
-};
+TextIcon.storyName = 'Text button + Icon';

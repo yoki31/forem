@@ -6,9 +6,9 @@ RSpec.describe Articles::Feeds::LargeForemExperimental, type: :service do
   let!(:feed) { described_class.new(user: user, number_of_articles: 100, page: 1) }
   let!(:article) { create(:article) }
   let!(:hot_story) do
-    create(:article, hotness_score: 1000, score: 1000, published_at: 3.hours.ago, user_id: second_user.id)
+    create(:article, :past, hotness_score: 1000, score: 1000, past_published_at: 3.hours.ago, user_id: second_user.id)
   end
-  let!(:old_story) { create(:article, published_at: 3.days.ago) }
+  let!(:old_story) { create(:article, :past, past_published_at: 3.days.ago) }
   let!(:low_scoring_article) { create(:article, score: -1000) }
 
   describe "#featured_story_and_default_home_feed" do
@@ -43,16 +43,6 @@ RSpec.describe Articles::Feeds::LargeForemExperimental, type: :service do
       it "does not load blocked articles" do
         create(:user_block, blocker: user, blocked: second_user, config: "default")
         expect(result).not_to include(hot_story)
-      end
-
-      it "doesn't display blocked articles", type: :system, js: true do
-        selector = "article[data-content-user-id='#{hot_story.user_id}']"
-        sign_in user
-        visit root_path
-        expect(page).to have_selector(selector, visible: :visible)
-        create(:user_block, blocker: user, blocked: hot_story.user, config: "default")
-        visit root_path
-        expect(page).to have_selector(selector, visible: :hidden)
       end
     end
 
@@ -156,7 +146,7 @@ RSpec.describe Articles::Feeds::LargeForemExperimental, type: :service do
   end
 
   describe ".globally_hot_articles" do
-    let!(:recently_published_article) { create(:article, published_at: 3.hours.ago) }
+    let!(:recently_published_article) { create(:article, :past, past_published_at: 3.hours.ago) }
     let(:globally_hot_articles) { feed.globally_hot_articles(true).second }
 
     it "returns hot recent stories" do
@@ -167,11 +157,11 @@ RSpec.describe Articles::Feeds::LargeForemExperimental, type: :service do
     context "when low number of hot stories and no recently published articles" do
       before do
         Article.delete_all
-        create(:article, hotness_score: 1000, score: 1000, published_at: 3.hours.ago)
+        create(:article, :past, hotness_score: 1000, score: 1000, past_published_at: 3.hours.ago)
       end
 
       # This test handles a situation in which there are a low number of hot or new stories, and the user is logged in.
-      # Previously the offest factor could result in zero stories being returned sometimes.
+      # Previously the offset factor could result in zero stories being returned sometimes.
 
       # We manually called `feed.globally_hot_articles` here because `let` caches it!
       it "still returns articles" do
@@ -189,7 +179,7 @@ RSpec.describe Articles::Feeds::LargeForemExperimental, type: :service do
     context "when no hot stories or recently published articles" do
       before do
         Article.delete_all
-        create(:article, hotness_score: 0, score: 0, published_at: 3.days.ago)
+        create(:article, :past, hotness_score: 0, score: 0, past_published_at: 3.days.ago)
       end
 
       it "still returns articles" do

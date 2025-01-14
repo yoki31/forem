@@ -1,9 +1,10 @@
 require "rails_helper"
 
-RSpec.describe "User visits a homepage", type: :system do
+RSpec.describe "User visits a homepage" do
   let!(:article) { create(:article, reactions_count: 12, featured: true, user: create(:user, profile_image: nil)) }
   let!(:article2) { create(:article, reactions_count: 20, featured: true, user: create(:user, profile_image: nil)) }
-  let!(:timestamp) { "2019-03-04T10:00:00Z" }
+  # Let's use yesterday's date for this instead of relying on a magic date.
+  let!(:timestamp) { "#{Date.yesterday.to_fs('%Y-%M-%d')}T10:00:00Z" }
   let(:published_datetime) { Time.zone.parse(timestamp) }
   let(:published_date) { published_datetime.strftime("%b %e").gsub("  ", " ") }
 

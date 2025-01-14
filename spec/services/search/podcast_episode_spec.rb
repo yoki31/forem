@@ -1,6 +1,5 @@
 require "rails_helper"
 
-# rubocop:disable RSpec/ExampleLength
 RSpec.describe Search::PodcastEpisode, type: :service do
   let(:podcast_episode) { create(:podcast_episode) }
 
@@ -85,7 +84,7 @@ RSpec.describe Search::PodcastEpisode, type: :service do
 
         expect(podcast[:slug]).to eq(podcast_episode.podcast_slug)
 
-        image_url = Images::Profile.call(podcast_episode.podcast.profile_image_url, length: 90)
+        image_url = podcast_episode.podcast.profile_image_url_for(length: 90)
         expect(podcast[:image_url]).to eq(image_url)
 
         expect(podcast[:title]).to eq(podcast_episode.title)

@@ -20,7 +20,7 @@ RSpec.describe DataUpdateWorker, type: :worker do
 
       expect do
         worker.perform(script.id)
-      end.to change(DataUpdateScript, :count).by(0)
+      end.not_to change(DataUpdateScript, :count)
 
       updated_script = DataUpdateScript.find(script.id)
       expect(updated_script.status).to eq("succeeded")
@@ -38,7 +38,7 @@ RSpec.describe DataUpdateWorker, type: :worker do
       worker.perform
       expect do
         worker.perform
-      end.to change(DataUpdateScript, :count).by(0)
+      end.not_to change(DataUpdateScript, :count)
     end
 
     it "updates DataUpdateScript model" do
@@ -46,10 +46,10 @@ RSpec.describe DataUpdateWorker, type: :worker do
         worker.perform
       end.to change(DataUpdateScript, :count).by(2)
 
-      successsful_dus = DataUpdateScript.find_by(status: :succeeded)
-      expect(successsful_dus.finished_at).not_to be_nil
-      expect(successsful_dus.run_at).not_to be_nil
-      expect(successsful_dus.error).to be_nil
+      successful_dus = DataUpdateScript.find_by(status: :succeeded)
+      expect(successful_dus.finished_at).not_to be_nil
+      expect(successful_dus.run_at).not_to be_nil
+      expect(successful_dus.error).to be_nil
 
       failed_dus = DataUpdateScript.find_by(status: :failed)
       expect(failed_dus.finished_at).not_to be_nil

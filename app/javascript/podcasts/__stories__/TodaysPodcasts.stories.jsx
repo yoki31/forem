@@ -20,9 +20,9 @@ export default {
 export const Standard = () => (
   <TodaysPodcasts>
     {episodes.map((episode) => (
-      <PodcastEpisode episode={episode} />
+      <PodcastEpisode key={episode.id} episode={episode} />
     ))}
   </TodaysPodcasts>
 );
 
-Standard.story = { name: 'standard' };
+Standard.storyName = 'standard';

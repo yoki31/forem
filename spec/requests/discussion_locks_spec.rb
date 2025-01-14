@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "DiscussionLocks", type: :request do
+RSpec.describe "DiscussionLocks" do
   let(:user) { create(:user) }
   let(:cache_buster) { EdgeCache::BustArticle }
 
@@ -9,7 +9,7 @@ RSpec.describe "DiscussionLocks", type: :request do
   describe "POST /discussion_locks - DiscussionLocks#create" do
     it "creates a DiscussionLock" do
       article = create(:article, user: user)
-      reason = "Unproductice comments."
+      reason = "Unproductive comments."
       notes = "Hostile comment from user @user"
       valid_attributes = { article_id: article.id, locking_user_id: user.id, notes: notes, reason: reason }
       expect do
@@ -29,7 +29,7 @@ RSpec.describe "DiscussionLocks", type: :request do
       invalid_article_attributes = { article_id: article.id, locking_user_id: user.id }
       expect do
         post discussion_locks_path, params: { discussion_lock: invalid_article_attributes }
-      end.to change(DiscussionLock, :count).by(0)
+      end.not_to change(DiscussionLock, :count)
 
       expect(request.flash[:error]).to include("Error: Article has already been taken")
     end
@@ -50,7 +50,7 @@ RSpec.describe "DiscussionLocks", type: :request do
       sign_out user
       sign_in other_user
 
-      reason = "Unproductice comments."
+      reason = "Unproductive comments."
       notes = "Hostile comment from user @user"
       valid_attributes = { article_id: article.id, locking_user_id: other_user.id, notes: notes, reason: reason }
       expect do

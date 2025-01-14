@@ -1,8 +1,13 @@
 module Github
-  # Github OAuth2 client (uses ocktokit.rb as a backend)
+  # Github OAuth2 client (uses octokit.rb as a backend)
   class OauthClient
     APP_AUTH_CREDENTIALS = %i[client_id client_secret].freeze
     APP_AUTH_CREDENTIALS_PRESENT = proc { |key, value| APP_AUTH_CREDENTIALS.include?(key) && value.present? }.freeze
+
+    def self.for_user(user)
+      access_token = user.identities.github.select(:token).take!.token
+      new(access_token: access_token)
+    end
 
     # @param credentials [Hash] the OAuth credentials, {client_id:, client_secret:} or {access_token:}
     def initialize(credentials = nil)
@@ -11,11 +16,6 @@ module Github
         client_secret: Settings::Authentication.github_secret
       }
       @credentials = check_credentials!(credentials)
-    end
-
-    def self.for_user(user)
-      access_token = user.identities.github.select(:token).take!.token
-      new(access_token: access_token)
     end
 
     # Hides private credentials when printed
@@ -115,13 +115,13 @@ module Github
       # <https://github.com/octokit/octokit.rb#caching>
       # and <https://github.com/octokit/octokit.rb/blob/master/lib/octokit/default.rb>
       Faraday::RackBuilder.new do |builder|
-        builder.use Faraday::Request::Retry, exceptions: [Octokit::ServerError]
+        builder.use Faraday::Retry::Middleware, exceptions: [Octokit::ServerError]
         builder.use Octokit::Middleware::FollowRedirects
         builder.use Octokit::Response::RaiseError
         builder.use Octokit::Response::FeedParser
 
         builder.response :logger if Rails.env.development?
-        builder.adapter :patron
+        builder.adapter Faraday.default_adapter
       end
     end
 

@@ -11,7 +11,8 @@ module ValidRequest
     return if Rails.env.test?
 
     if (referer = request.referer).present?
-      referer.start_with?(URL.url)
+      subforem = Subforem.find_by(domain: request.host)
+      referer.start_with?(URL.url(nil, subforem))
     else
       origin = request.origin
       if origin == "null"
@@ -34,6 +35,8 @@ module ValidRequest
       "#{URL.protocol || request.protocol}#{request.host_with_port}#{options}"
     when Proc
       _compute_redirect_to_location request, instance_eval(&options)
+    when Array
+      url_for
     else
       url_for(options)
     end.delete("\0\r\n")

@@ -10,12 +10,12 @@ RSpec.describe Notifications::WelcomeNotification::Send, type: :service do
     end
 
     it "creates a new welcome notification", :aggregate_failures do
-      expect(Notification.find_by(notifiable_id: welcome_broadcast.id)).to be(nil)
+      expect(Notification.find_by(notifiable_id: welcome_broadcast.id)).to be_nil
 
       described_class.call(create(:user).id, welcome_broadcast)
 
       welcome_notification = Notification.find_by(notifiable_id: welcome_broadcast.id)
-      expect(welcome_notification).to be_kind_of(Notification)
+      expect(welcome_notification).to be_a(Notification)
       expect(welcome_notification.notifiable_type).to eq "Broadcast"
       expect(welcome_notification.action).to eq "Welcome"
       expect(welcome_notification.json_data["broadcast"]["processed_html"]).to eq welcome_broadcast.processed_html

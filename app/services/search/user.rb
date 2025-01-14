@@ -10,8 +10,6 @@ module Search
     DEFAULT_PER_PAGE = 60
     MAX_PER_PAGE = 100
 
-    # User.search_score used to take employer related fields into account, but they have since been moved to profile
-    # and removed from fields that are searched against.
     HOTNESS_SCORE_ORDER = Arel.sql(%{
       (((articles_count + comments_count + reactions_count + badge_achievements_count) * 10) * reputation_modifier)
       DESC
@@ -26,6 +24,8 @@ module Search
       relation = ::User
 
       relation = filter_suspended_users(relation)
+
+      relation = relation.registered
 
       relation = relation.search_by_name_and_username(term) if term.present?
 

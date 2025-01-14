@@ -8,17 +8,17 @@ module Slack
         Manage commenter - @%<username>s: %<internal_user_url>s
       TEXT
 
+      def self.call(...)
+        new(...).call
+      end
+
       def initialize(comment:)
         @comment = comment
         @user = comment.user
       end
 
-      def self.call(...)
-        new(...).call
-      end
-
       def call
-        return unless user.warned
+        return unless user.warned?
 
         internal_user_url = URL.url(
           Rails.application.routes.url_helpers.admin_user_path(user),
@@ -33,10 +33,10 @@ module Slack
         )
 
         Slack::Messengers::Worker.perform_async(
-          message: message,
-          channel: "warned-user-comments",
-          username: "sloan_watch_bot",
-          icon_emoji: ":sloan:",
+          "message" => message,
+          "channel" => "warned-user-comments",
+          "username" => "sloan_watch_bot",
+          "icon_emoji" => ":sloan:",
         )
       end
 

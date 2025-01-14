@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "/admin/advanced/response_templates", type: :request do
+RSpec.describe "/admin/advanced/response_templates" do
   let(:admin) { create(:user, :admin) }
 
   before { sign_in admin }
@@ -8,14 +8,14 @@ RSpec.describe "/admin/advanced/response_templates", type: :request do
   describe "GET /admin/advanced/response_templates" do
     it "renders with status 200" do
       get admin_response_templates_path
-      expect(response.status).to eq 200
+      expect(response).to have_http_status :ok
     end
 
     context "when there are response templates to render" do
       it "renders with status 200" do
         create(:response_template)
         get admin_response_templates_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
       end
     end
 
@@ -25,7 +25,7 @@ RSpec.describe "/admin/advanced/response_templates", type: :request do
       it "renders with status 200" do
         sign_in single_resource_admin
         get admin_response_templates_path
-        expect(response.status).to eq 200
+        expect(response).to have_http_status :ok
       end
     end
   end
@@ -33,7 +33,7 @@ RSpec.describe "/admin/advanced/response_templates", type: :request do
   describe "GET /admin/advanced/response_templates/new" do
     it "renders with status 200" do
       get admin_response_templates_path
-      expect(response.status).to eq 200
+      expect(response).to have_http_status :ok
     end
   end
 
@@ -59,7 +59,7 @@ RSpec.describe "/admin/advanced/response_templates", type: :request do
           title: "something"
         }
       }
-      expect(response.body).to include(ResponseTemplate::COMMENT_VALIDATION_MSG)
+      expect(response.body).to include(I18n.t("models.response_template.comment_markdown"))
     end
   end
 
@@ -102,7 +102,7 @@ RSpec.describe "/admin/advanced/response_templates", type: :request do
           content_type: "html"
         }
       }
-      expect(response.body).to include(ResponseTemplate::COMMENT_VALIDATION_MSG)
+      expect(response.body).to include(I18n.t("models.response_template.comment_markdown"))
     end
   end
 

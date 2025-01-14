@@ -2,8 +2,23 @@ module Authentication
   module Providers
     class Forem < Provider
       OFFICIAL_NAME = "Forem".freeze
-      DOMAIN_URL = ApplicationConfig["PASSPORT_OAUTH_URL"] || "https://passport.forem.com".freeze
+      DOMAIN_URL = ApplicationConfig["FOREM_OAUTH_URL"] || "https://account.forem.com".freeze
       SETTINGS_URL = "#{DOMAIN_URL}/oauth/authorized_applications".freeze
+
+      def self.official_name
+        OFFICIAL_NAME
+      end
+
+      def self.settings_url
+        SETTINGS_URL
+      end
+
+      def self.sign_in_path(**kwargs)
+        ::Authentication::Paths.sign_in_path(
+          provider_name,
+          **kwargs,
+        )
+      end
 
       def new_user_data
         {
@@ -23,21 +38,6 @@ module Authentication
       end
 
       delegate :user_nickname, to: :info
-
-      def self.official_name
-        OFFICIAL_NAME
-      end
-
-      def self.settings_url
-        SETTINGS_URL
-      end
-
-      def self.sign_in_path(**kwargs)
-        ::Authentication::Paths.sign_in_path(
-          provider_name,
-          **kwargs,
-        )
-      end
 
       protected
 

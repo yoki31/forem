@@ -7,11 +7,17 @@ en:
         description: Tags to follow on %{community}
         og:
           description: "%{community} is great!"
-      heading: Top tags
+      heading:
+        default: Tags
+        search_results: Search results for %{q}
+      search:
+        aria_labels:
+          search_input: Tag search term
+          submit: Search tags
+        placeholder: Search for tag
       edit:
         meta:
           title: Edit %{tag}
-        heading_html: " Editing: %{tag}"
         admin: "Admin"
         help: "Help"
         view: "View"
@@ -20,9 +26,7 @@ en:
             label: Pretty name
             placeholder: This is the name at the top of the show page.
           bg_color_hex:
-            label: Bg color hex
-          text_color_hex:
-            label: Text color hex
+            label: Tag color
           short_summary:
             label: Short summary
             placeholder: Brief overview of what this tag is all about.
@@ -34,14 +38,19 @@ en:
             placeholder: Optional - Can be used for challenges, i.e. submission guidelines.
           submit: Save
       follow: Follow
+      hide: Hide
+      aria_labels:
+        follow: "Follow tag: %{tag_name}"
+        hide: "Hide tag: %{tag_name}"
       following_tags: Following tags
+      hidden_tags: Hidden tags
       moderator:
         text_html: "comma separated, space is optional. Example: %{code}"
         code: 123
         placeholder: "comma separated, space is optional. Example: 1,2,3"
       published:
-        one: 1 post published
-        other: "%{count} posts published"
+        one: 1 post
+        other: "%{count} posts"
       sidebar:
         about: 'about #%{tag}'
         admin: Admin
@@ -54,5 +63,3 @@ en:
         published:
           one: 1 Post Published
           other: "%{count} Posts Published"
-        sponsor: "%{tag} is sponsored by"
-      sponsor: "| Sponsored by %{org} ❤️"

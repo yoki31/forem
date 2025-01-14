@@ -1,12 +1,13 @@
 module Users
   class SettingsController < ApplicationController
-    before_action :raise_suspended
+    before_action :check_suspended
     before_action :authenticate_user!
     after_action :verify_authorized
 
     ALLOWED_PARAMS = %i[config_theme
                         config_font
                         config_navbar
+                        content_preferences_input
                         display_announcements
                         display_sponsors
                         editor_version
@@ -31,7 +32,7 @@ module Users
           cookies.permanent[:user_experience_level] = users_setting.experience_level.to_s
         end
         current_user.touch(:profile_updated_at)
-        flash[:settings_notice] = "Your config has been updated. Refresh to see all changes."
+        flash[:settings_notice] = I18n.t("users_controller.updated_config")
       else
         Honeycomb.add_field("error", users_setting.errors.messages.compact_blank)
         Honeycomb.add_field("errored", true)

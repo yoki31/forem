@@ -1,21 +1,8 @@
 import { h } from 'preact';
 import PropTypes from 'prop-types';
-import { Dropdown, Button } from '@crayons';
-
-const Icon = () => (
-  <svg
-    width="24"
-    className="crayons-icon"
-    height="24"
-    viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
-    role="img"
-    aria-labelledby="75abcb76478519ca4eb9"
-  >
-    <title id="75abcb76478519ca4eb9">Post options</title>
-    <path d="M12 1l9.5 5.5v11L12 23l-9.5-5.5v-11L12 1zm0 2.311L4.5 7.653v8.694l7.5 4.342 7.5-4.342V7.653L12 3.311zM12 16a4 4 0 110-8 4 4 0 010 8zm0-2a2 2 0 100-4 2 2 0 000 4z" />
-  </svg>
-);
+import moment from 'moment';
+import { Dropdown, ButtonNew as Button } from '@crayons';
+import CogIcon from '@images/cog.svg';
 
 /**
  * Component comprising a trigger button and dropdown with additional post options.
@@ -25,18 +12,30 @@ const Icon = () => (
  * @param {Function} props.onSaveDraft Callback for when the post draft is saved
  * @param {Function} props.onConfigChange Callback for when the config options have changed
  */
+
 export const Options = ({
   passedData: {
     published = false,
+    publishedAtDate = '',
+    publishedAtTime = '',
+    publishedAtWas = '',
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
     allSeries = [],
     canonicalUrl = '',
     series = '',
   },
+  schedulingEnabled,
   onSaveDraft,
   onConfigChange,
+  previewLoading,
 }) => {
   let publishedField = '';
   let existingSeries = '';
+  let publishedAtField = '';
+
+  const wasScheduled = publishedAtWas && moment(publishedAtWas) > moment();
+  // allow to edit published at if it was not set earlier or if it's in the future
+  const editablePublishedAt = !publishedAtWas || wasScheduled;
 
   if (allSeries.length > 0) {
     const seriesNames = allSeries.map((name, index) => {
@@ -68,32 +67,87 @@ export const Options = ({
   }
 
   if (published) {
-    publishedField = (
-      <div data-testid="options__danger-zone" className="crayons-field mb-6">
-        <div className="crayons-field__label color-accent-danger">
-          Danger Zone
+    if (wasScheduled) {
+      publishedField = (
+        <div data-testid="options__danger-zone" className="crayons-field mb-6">
+          <Button
+            className="c-btn c-btn--secondary w-100"
+            variant="primary"
+            onClick={onSaveDraft}
+          >
+            Convert to a Draft
+          </Button>
         </div>
-        <Button variant="danger" onClick={onSaveDraft}>
-          Unpublish post
-        </Button>
+      );
+    } else {
+      publishedField = (
+        <div data-testid="options__danger-zone" className="crayons-field mb-6">
+          <div className="crayons-field__label color-accent-danger">
+            Danger Zone
+          </div>
+          <Button variant="primary" destructive onClick={onSaveDraft}>
+            Unpublish post
+          </Button>
+        </div>
+      );
+    }
+  }
+
+  if (schedulingEnabled && editablePublishedAt) {
+    const currentDate = moment().format('YYYY-MM-DD');
+    publishedAtField = (
+      <div className="crayons-field mb-6">
+        <label htmlFor="publishedAtDate" className="crayons-field__label">
+          Schedule Publication
+        </label>
+        <input
+          aria-label="Schedule publication date"
+          type="date"
+          min={currentDate}
+          value={publishedAtDate} // ""
+          className="crayons-textfield"
+          name="publishedAtDate"
+          onChange={onConfigChange}
+          id="publishedAtDate"
+          placeholder="..."
+        />
+        <input
+          aria-label="Schedule publication time"
+          type="time"
+          value={publishedAtTime} // "18:00"
+          className="crayons-textfield"
+          name="publishedAtTime"
+          onChange={onConfigChange}
+          id="publishedAtTime"
+          placeholder="..."
+        />
+        <input
+          type="hidden"
+          value={timezone} // "Asia/Magadan"
+          className="crayons-textfield"
+          name="timezone"
+          id="timezone"
+          placeholder="..."
+        />
       </div>
     );
   }
+
   return (
     <div className="s:relative">
       <Button
         id="post-options-btn"
-        variant="ghost"
-        contentType="icon"
-        icon={Icon}
+        icon={CogIcon}
         title="Post options"
+        aria-label="Post options"
+        disabled={previewLoading}
       />
 
       <Dropdown
         triggerButtonId="post-options-btn"
         dropdownContentId="post-options-dropdown"
         dropdownContentCloseButtonId="post-options-done-btn"
-        className="bottom-2 s:bottom-100 left-2 s:left-0 right-2 s:left-auto p-4"
+        className="reverse left-2 s:left-0 right-2 s:left-auto p-4"
       >
         <h3 className="mb-6">Post options</h3>
         <div className="crayons-field mb-6">
@@ -114,9 +168,11 @@ export const Options = ({
             placeholder="https://yoursite.com/post-title"
             name="canonicalUrl"
             onKeyUp={onConfigChange}
+            onInput={onConfigChange}
             id="canonicalUrl"
           />
         </div>
+        {publishedAtField}
         <div className="crayons-field mb-6">
           <label htmlFor="series" className="crayons-field__label">
             Series
@@ -141,6 +197,7 @@ export const Options = ({
           id="post-options-done-btn"
           className="w-100"
           data-content="exit"
+          variant="secondary"
         >
           Done
         </Button>
@@ -152,12 +209,18 @@ export const Options = ({
 Options.propTypes = {
   passedData: PropTypes.shape({
     published: PropTypes.bool.isRequired,
+    publishedAtDate: PropTypes.string.isRequired,
+    publishedAtTime: PropTypes.string.isRequired,
+    publishedAtWas: PropTypes.string.isRequired,
+    timezone: PropTypes.string.isRequired,
     allSeries: PropTypes.array.isRequired,
     canonicalUrl: PropTypes.string.isRequired,
     series: PropTypes.string.isRequired,
   }).isRequired,
+  schedulingEnabled: PropTypes.bool.isRequired,
   onSaveDraft: PropTypes.func.isRequired,
   onConfigChange: PropTypes.func.isRequired,
+  previewLoading: PropTypes.bool.isRequired,
 };
 
 Options.displayName = 'Options';

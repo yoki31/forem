@@ -1,7 +1,7 @@
 import { h } from 'preact';
 import '../../../storybook-utilities/designSystem.scss';
 import { useState } from 'preact/hooks';
-import notes from './navigation-tab.md';
+import notes from './navigation-tab.mdx';
 
 export default {
   title: 'Components/Navigation/Tabs/HTML',
@@ -70,9 +70,7 @@ export const Default = () => {
   );
 };
 
-Default.story = {
-  name: 'default',
-};
+Default.storyName = 'default';
 
 export const Buttons = () => (
   <nav className="crayons-tabs" aria-label="View post options">
@@ -91,6 +89,4 @@ export const Buttons = () => (
     </ul>
   </nav>
 );
-Buttons.story = {
-  name: 'buttons',
-};
+Buttons.storyName = 'buttons';

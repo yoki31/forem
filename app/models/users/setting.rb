@@ -1,4 +1,7 @@
 module Users
+  #  @note When we destroy the related user, it's using dependent:
+  #        :delete for the relationship.  That means no before/after
+  #        destroy callbacks will be called on this object.
   class Setting < ApplicationRecord
     self.table_name_prefix = "users_"
 
@@ -18,16 +21,19 @@ module Users
          _suffix: :feed
 
     validates :brand_color1,
-              :brand_color2,
-              format: { with: HEX_COLOR_REGEXP, message: "is not a valid hex color" },
+              format: { with: HEX_COLOR_REGEXP,
+                        message: I18n.t("models.users.setting.invalid_hex") },
               allow_nil: true
-    validates :user_id, presence: true
-    validates :experience_level, numericality: { less_than_or_equal_to: 10 }, allow_blank: true
+    validates :experience_level, numericality: { in: 1..10 }, allow_blank: true
     validates :feed_referential_link, inclusion: { in: [true, false] }
     validates :feed_url, length: { maximum: 500 }, allow_nil: true
     validates :inbox_guidelines, length: { maximum: 250 }, allow_nil: true
+    validates :content_preferences_input, length: { maximum: 1250 }, allow_nil: true
 
     validate :validate_feed_url, if: :feed_url_changed?
+
+    before_update :update_content_preferences_updated_at_if_changed
+    after_update :refresh_auto_audience_segments
 
     def resolved_font_name
       config_font.gsub("default", Settings::UserExperience.default_font)
@@ -35,14 +41,24 @@ module Users
 
     private
 
+    def refresh_auto_audience_segments
+      user.refresh_auto_audience_segments
+    end
+
     def validate_feed_url
       return if feed_url.blank?
 
       valid = Feeds::ValidateUrl.call(feed_url)
 
-      errors.add(:feed_url, "is not a valid RSS/Atom feed") unless valid
+      errors.add(:feed_url, I18n.t("models.users.setting.invalid_rss")) unless valid
     rescue StandardError => e
       errors.add(:feed_url, e.message)
+    end
+
+    def update_content_preferences_updated_at_if_changed
+      return unless content_preferences_input.present? && content_preferences_input_changed?
+
+      self.content_preferences_updated_at = Time.current
     end
   end
 end

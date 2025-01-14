@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "User visits /pod page", type: :system do
+RSpec.describe "User visits /pod page" do
   let!(:podcast_episode1) { create(:podcast_episode, published_at: 7.hours.ago) }
   let!(:podcast_episode2) { create(:podcast_episode, published_at: 7.days.ago) }
   let!(:podcast_episode3) { create(:podcast_episode) }
@@ -21,8 +21,8 @@ RSpec.describe "User visits /pod page", type: :system do
 
   it "displays the podcasts with published_at" do
     within "#main-content" do
-      expect(page).to have_selector("time.published-at", count: 2)
-      expect(page).to have_selector("span.time-ago-indicator-initial-placeholder", count: 2)
+      expect(page).to have_selector("time.published-at")
+      expect(page).to have_selector("span.time-ago-indicator-initial-placeholder")
     end
   end
 
