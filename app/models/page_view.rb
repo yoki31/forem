@@ -1,3 +1,6 @@
+# @note When we destroy the related article, it's using dependent:
+#       :delete for the relationship.  That means no before/after
+#       destroy callbacks will be called on this object.
 class PageView < ApplicationRecord
   belongs_to :user, optional: true
   belongs_to :article
@@ -27,12 +30,13 @@ class PageView < ApplicationRecord
     article.decorate.cached_tag_list_array
   end
 
+  # @see AbExperiment::GoalConversionHandler
   def record_field_test_event
     return if FieldTest.config["experiments"].nil?
 
     return unless user_id
 
     Users::RecordFieldTestEventWorker
-      .perform_async(user_id, "user_creates_pageview")
+      .perform_async(user_id, AbExperiment::GoalConversionHandler::USER_CREATES_PAGEVIEW_GOAL)
   end
 end

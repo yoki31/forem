@@ -1,4 +1,5 @@
 import { Controller } from '@hotwired/stimulus';
+import { displayErrorAlert } from '../messageUtilities';
 
 export default class ImageUploadController extends Controller {
   static targets = ['fileField', 'imageResult'];
@@ -29,20 +30,25 @@ export default class ImageUploadController extends Controller {
         }
         const { links } = json;
         return this.onUploadSuccess(links);
-      });
+      })
+      .catch(this.onUploadFailure);
   }
 
   onUploadSuccess(result) {
-    this.imageResultTarget.classList.remove('d-none');
+    this.imageResultTarget.classList.remove('hidden');
     const output = `
-      <div class="form-group">
-        <label for="output">Image URL:</label>
-        <textfield id="output" name="output" class="form-control" readonly>
+      <div class="mb-4">
+        <label for="output" class="crayons-field__label">Image URL:</label>
+        <textfield id="output" name="output" class="crayons-textfield" readonly>
           ${result}
         </textfield>
       </div>
       <img width="300px" src=${result}>
     `;
     this.imageResultTarget.innerHTML = output;
+  }
+
+  onUploadFailure(error) {
+    displayErrorAlert(error.message);
   }
 }

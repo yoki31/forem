@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "UserSettings", type: :request do
+RSpec.describe "UserSettings" do
   let(:user) { create(:user) }
 
   describe "GET /settings/:tab" do
@@ -15,10 +15,10 @@ RSpec.describe "UserSettings", type: :request do
       before { sign_in user }
 
       it "renders various settings tabs properly" do
-        Settings.tab_list.each do |tab|
+        Constants::Settings::TAB_LIST.each do |tab|
           get user_settings_path(tab.downcase.tr(" ", "-"))
 
-          expect(response.body).to include("Settings for")
+          expect(response.body).to include("@#{user.username}")
         end
       end
 
@@ -53,7 +53,7 @@ RSpec.describe "UserSettings", type: :request do
         expect(response.body).to include("Email notifications", "Mobile notifications", "General notifications")
       end
 
-      it "displays moderator notifications secons on Notifications tab if trusted" do
+      it "displays moderator notifications second on Notifications tab if trusted" do
         user.add_role(:trusted)
 
         get user_settings_path(:notifications)
@@ -64,7 +64,7 @@ RSpec.describe "UserSettings", type: :request do
       it "displays content on Account tab properly" do
         get user_settings_path(:account)
 
-        expect(response.body).to include("Set new password", "Account emails", "API Keys", "Danger Zone")
+        expect(response.body).to include("Set new password", "Account emails", "Danger Zone")
       end
 
       it "displays content on Billing tab properly" do
@@ -83,8 +83,7 @@ RSpec.describe "UserSettings", type: :request do
         get user_settings_path(:extensions)
 
         feed_section = "Publishing to #{Settings::Community.community_name} from RSS"
-        stackbit_section = "Generate a personal blog from your #{Settings::Community.community_name} posts"
-        titles = ["Comment templates", feed_section, "Web monetization", stackbit_section]
+        titles = ["Comment templates", feed_section, "API Keys"]
         expect(response.body).to include(*titles)
       end
 
@@ -111,6 +110,8 @@ RSpec.describe "UserSettings", type: :request do
 
     describe ":account" do
       let(:remove_oauth_section) { "Remove OAuth Associations" }
+      let(:remove_oauth_description) { "You can remove one of your authentication methods" }
+      let(:remove_oauth_instructions) { "Please add another authentication method" }
       let(:user) { create(:user, :with_identity) }
 
       before do
@@ -123,27 +124,37 @@ RSpec.describe "UserSettings", type: :request do
         expect(response).to have_http_status(:ok)
       end
 
-      it "shows the 'Remove OAuth' section if a user has multiple enabled identities" do
+      it "shows the description if a user has multiple enabled identities" do
         allow(Authentication::Providers).to receive(:enabled).and_return(Authentication::Providers.available)
         providers = Authentication::Providers.available.first(2)
         allow(user).to receive(:identities).and_return(user.identities.where(provider: providers))
 
         get user_settings_path(tab: "account")
-        expect(response.body).to include(remove_oauth_section)
+        expect(response.body).to include(remove_oauth_description)
+        expect(response.body).not_to include(remove_oauth_instructions)
       end
 
-      it "hides the 'Remove OAuth' section if a user has one enabled identity" do
+      it "shows instructions how to remove an identity if a user has one enabled identity" do
         provider = Authentication::Providers.available.first
         allow(Authentication::Providers).to receive(:enabled).and_return([provider])
         allow(user).to receive(:identities).and_return(user.identities.where(provider: provider))
 
         get user_settings_path(tab: "account")
-        expect(response.body).not_to include(remove_oauth_section)
+        expect(response.body).not_to include(remove_oauth_description)
+        expect(response.body).to include(remove_oauth_instructions)
       end
 
-      it "hides the 'Remove OAuth' section if a user has one enabled identity and one disabled" do
+      it "shows instructions how to remove an identity if a user has one enabled identity and one disabled" do
         provider = Authentication::Providers.available.first
         allow(Authentication::Providers).to receive(:enabled).and_return([provider])
+
+        get user_settings_path(tab: "account")
+        expect(response.body).not_to include(remove_oauth_description)
+        expect(response.body).to include(remove_oauth_instructions)
+      end
+
+      it "hides the 'Remove OAuth' section if a user has no enabled identity" do
+        allow(Authentication::Providers).to receive(:enabled).and_return([])
 
         get user_settings_path(tab: "account")
         expect(response.body).not_to include(remove_oauth_section)
@@ -360,7 +371,7 @@ RSpec.describe "UserSettings", type: :request do
       it "empties their associated username" do
         delete users_remove_identity_path, params: { provider: provider }
 
-        expect(user.public_send("#{provider}_username")).to be(nil)
+        expect(user.public_send("#{provider}_username")).to be_nil
       end
 
       it "updates the profile_updated_at timestamp" do
@@ -389,7 +400,7 @@ RSpec.describe "UserSettings", type: :request do
         expect(response).to redirect_to("/settings/account")
 
         error =
-          "An error occurred. Please try again or send an email to: #{ForemInstance.email}"
+          "An error occurred. Please try again or send an email to: #{ForemInstance.contact_email}"
         expect(flash[:error]).to eq(error)
       end
 
@@ -432,7 +443,7 @@ RSpec.describe "UserSettings", type: :request do
         delete users_remove_identity_path, params: { provider: provider }
 
         error =
-          "An error occurred. Please try again or send an email to: #{ForemInstance.email}"
+          "An error occurred. Please try again or send an email to: #{ForemInstance.contact_email}"
         expect(flash[:error]).to eq(error)
       end
 

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "StripeActiveCards", type: :request do
+RSpec.describe "StripeActiveCards" do
   let(:user) { create(:user) }
   let(:stripe_helper) { StripeMock.create_test_helper }
   let(:card_token) { stripe_helper.generate_card_token }
@@ -30,7 +30,7 @@ RSpec.describe "StripeActiveCards", type: :request do
       expect(flash[:settings_notice]).to eq("Your billing information has been updated")
 
       card = Payments::Customer.get(user.stripe_id_code).sources.first
-      expect(card.is_a?(Stripe::Card)).to eq(true)
+      expect(card.is_a?(Stripe::Card)).to be(true)
     end
 
     it "creates an AuditLog entry for successful creates" do

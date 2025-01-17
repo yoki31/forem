@@ -15,7 +15,7 @@ RSpec.describe UserPolicy, type: :policy do
     let(:user) { other_user }
 
     permitted_actions = %i[
-      edit update onboarding_update join_org dashboard_show remove_identity destroy
+      edit analytics update onboarding_update join_org dashboard_show remove_identity destroy
     ]
 
     it { is_expected.to permit_actions(permitted_actions) }
@@ -23,7 +23,7 @@ RSpec.describe UserPolicy, type: :policy do
     context "with suspended status" do
       before { user.add_role(:suspended) }
 
-      it { is_expected.to forbid_actions(%i[join_org moderation_routes]) }
+      it { is_expected.to forbid_actions(%i[join_org moderation_routes update]) }
     end
   end
 
@@ -47,6 +47,12 @@ RSpec.describe UserPolicy, type: :policy do
 
   context "when the user is a super admin" do
     let(:user) { build(:user, :super_admin) }
+
+    it { is_expected.to permit_actions(%i[moderation_routes]) }
+  end
+
+  context "when the user is a moderator" do
+    let(:user) { build(:user, :super_moderator) }
 
     it { is_expected.to permit_actions(%i[moderation_routes]) }
   end

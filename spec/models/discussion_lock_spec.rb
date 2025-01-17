@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe DiscussionLock, type: :model do
+RSpec.describe DiscussionLock do
   let(:discussion_lock) { create(:discussion_lock) }
 
   describe "relationships" do
@@ -11,8 +11,6 @@ RSpec.describe DiscussionLock, type: :model do
   describe "validations" do
     subject { discussion_lock }
 
-    it { is_expected.to validate_presence_of(:article_id) }
-    it { is_expected.to validate_presence_of(:locking_user_id) }
     it { is_expected.to validate_uniqueness_of(:article_id) }
 
     it "sanitizes attributes before validation", :aggregate_failures do

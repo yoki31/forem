@@ -3,7 +3,7 @@ import { h } from 'preact';
 import '../../../storybook-utilities/designSystem.scss';
 
 export default {
-  title: 'Components/Form Components/Multiline Text Field/HTML',
+  title: 'Components/Form Elements/Multiline Text Field',
 };
 
 export const Default = () => (
@@ -13,7 +13,7 @@ export const Default = () => (
   />
 );
 
-Default.story = { name: 'default' };
+Default.storyName = 'default';
 
 export const Disabled = () => (
   <textarea
@@ -25,4 +25,4 @@ export const Disabled = () => (
   </textarea>
 );
 
-Disabled.story = { name: 'disabled' };
+Disabled.storyName = 'disabled';

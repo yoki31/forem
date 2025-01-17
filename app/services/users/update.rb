@@ -6,7 +6,7 @@ module Users
 
     CORE_PROFILE_FIELDS = %i[summary].freeze
     CORE_USER_FIELDS = %i[name username profile_image].freeze
-    CORE_SETTINGS_FIELDS = %i[brand_color1 brand_color2].freeze
+    CORE_SETTINGS_FIELDS = %i[brand_color1].freeze
 
     # @param user [User] the user whose profile we are updating
     # @param updated_attributes [Hash<Symbol, Hash<Symbol, Object>>] the profile
@@ -24,10 +24,10 @@ module Users
 
     def initialize(user, updated_attributes)
       @user = user
-      @profile = user.profile
+      @profile = user.profile || user.create_profile
       @users_setting = user.setting
       @updated_profile_attributes = updated_attributes[:profile] || {}
-      @updated_user_attributes = updated_attributes[:user].to_h || {}
+      @updated_user_attributes = prepare_user_attributes(updated_attributes[:user], user)
       @updated_users_setting_attributes = updated_attributes[:users_setting].to_h || {}
       @errors = []
       @success = false
@@ -60,6 +60,15 @@ module Users
 
     attr_reader :errors
 
+    def prepare_user_attributes(updated_user_attributes, user)
+      attrs = updated_user_attributes.to_h || {}
+      if attrs[:username] != user.username
+        attrs[:old_username] = user.username
+        attrs[:old_old_username] = user.old_username
+      end
+      attrs
+    end
+
     def update_successful?
       return false unless verify_profile_image
 
@@ -84,20 +93,19 @@ module Users
     def valid_image_file?(image)
       return true if file?(image)
 
-      errors.append(IS_NOT_FILE_MESSAGE)
+      errors.append(is_not_file_message)
       false
     end
 
     def valid_filename?(image)
       return true unless long_filename?(image)
 
-      errors.append(FILENAME_TOO_LONG_MESSAGE)
+      errors.append(filename_too_long_message)
       false
     end
 
     def update_profile
-      # We don't update `data` directly. This uses the defined store_attributes
-      # so we can make use of their typecasting.
+      # We don't update `data` directly. This uses the store_accessors instead.
       @profile.assign_attributes(@updated_profile_attributes)
 
       # Before saving, filter out obsolete profile fields
@@ -107,7 +115,7 @@ module Users
     end
 
     def conditionally_resave_articles
-      return unless resave_articles? && !@user.suspended?
+      return unless resave_articles? && !@user.spam_or_suspended?
 
       Users::ResaveArticlesWorker.perform_async(@user.id)
     end

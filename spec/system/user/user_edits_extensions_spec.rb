@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "User edits their extensions", type: :system, js: true do
+RSpec.describe "User edits their extensions", js: true do
   let(:user) { create(:user) }
   let(:github_response_body) do
     [
@@ -19,25 +19,6 @@ RSpec.describe "User edits their extensions", type: :system, js: true do
       .to_return(status: 200, body: github_response_body.to_json, headers: { "Content-Type" => "application/json" })
   end
 
-  describe "Stackbit" do
-    before do
-      visit user_settings_path
-    end
-
-    it "has connect-to-stackbit prompt" do
-      click_link "Extensions"
-
-      expect(page).to have_text("Connect to Stackbit")
-    end
-
-    it "has connected-to-stackbit prompt if already integrated" do
-      create(:doorkeeper_access_token, resource_owner: user)
-
-      click_link "Extensions"
-      expect(page).to have_text("Connected to Stackbit")
-    end
-  end
-
   describe "Feed" do
     before do
       visit user_settings_path(:extensions)
@@ -51,19 +32,6 @@ RSpec.describe "User edits their extensions", type: :system, js: true do
       click_on "Submit Feed Settings"
 
       expect(page).to have_text("Feed url is not a valid RSS/Atom feed")
-    end
-  end
-
-  describe "PaymentPointer" do
-    before do
-      visit user_settings_path(:extensions)
-    end
-
-    it "fails if the payment pointer is invalid" do
-      fill_in "user[payment_pointer]", with: "invalid_example/value"
-      click_on "Save Web Monetization Settings"
-
-      expect(page).to have_text("Payment pointer is invalid")
     end
   end
 end

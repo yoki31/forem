@@ -16,7 +16,6 @@ module Html
     RAW_TAG_DELIMITERS = ["{", "}", "raw", "endraw", "----"].freeze
     RAW_TAG = "{----% raw %----}".freeze
     END_RAW_TAG = "{----% endraw %----}".freeze
-    TIMEOUT = 10
 
     attr_accessor :html
     private :html=
@@ -33,7 +32,7 @@ module Html
       self
     end
 
-    def prefix_all_images(width = 880, synchronous_detail_detection: false)
+    def prefix_all_images(width: 880, synchronous_detail_detection: false, quality: "auto")
       # wrap with Cloudinary or allow if from giphy or githubusercontent.com
       doc = Nokogiri::HTML.fragment(@html)
 
@@ -43,17 +42,16 @@ module Html
         # allow image to render as-is
         next if allowed_image_host?(src)
 
-        if synchronous_detail_detection && img
-          attribute_width, attribute_height = Articles::EnrichImageAttributes.image_width_height(img, TIMEOUT)
-          img["width"] = attribute_width
-          img["height"] = attribute_height
+        if synchronous_detail_detection
+          header = { "User-Agent" => "#{Settings::Community.community_name} (#{URL.url})" }
+          img["width"], img["height"] = FastImage.size(src, timeout: 10, http_header: header)
         end
 
         img["loading"] = "lazy"
         img["src"] = if Giphy::Image.valid_url?(src)
                        src.gsub("https://media.", "https://i.")
                      else
-                       img_of_size(src, width)
+                       img_of_size(src, width, quality: quality)
                      end
       end
 
@@ -101,12 +99,12 @@ module Html
     end
 
     def add_fullscreen_button_to_panel
-      on_title = "Enter fullscreen mode"
+      on_title = I18n.t("services.html.parser.enter_fullscreen_mode")
       on_cls = "highlight-action crayons-icon highlight-action--fullscreen-on"
       icon_fullscreen_on = inline_svg_tag(
         "fullscreen-on.svg", class: on_cls, title: on_title, width: "20px", height: "20px"
       )
-      off_title = "Exit fullscreen mode"
+      off_title = I18n.t("services.html.parser.exit_fullscreen_mode")
       off_cls = "highlight-action crayons-icon highlight-action--fullscreen-off"
       icon_fullscreen_off = inline_svg_tag(
         "fullscreen-off.svg", class: off_cls, title: off_title, width: "20px", height: "20px"
@@ -229,7 +227,7 @@ module Html
 
         # only focus on portion of text with "@"
         node.xpath("text()[contains(.,'@')]").each do |el|
-          el.replace(el.text.gsub(/\B@[a-z0-9_-]+/i) { |text| user_link_if_exists(text) })
+          el.replace(el.to_s.gsub(/\B@[a-z0-9_-]+/i) { |text| user_link_if_exists(text) })
         end
 
         # enqueue children that has @ in it's text
@@ -260,8 +258,8 @@ module Html
 
     private
 
-    def img_of_size(source, width = 880)
-      Images::Optimizer.call(source, width: width).gsub(",", "%2C")
+    def img_of_size(source, width = 880, quality: "auto")
+      Images::Optimizer.call(source, width: width, quality: quality).gsub(",", "%2C")
     end
 
     def all_children_are_blank?(node)
@@ -273,14 +271,13 @@ module Html
     end
 
     def allowed_image_host?(src)
-      # GitHub camo image won't parse but should be safe to host direct
-      src.start_with?("https://camo.githubusercontent.com")
+      ImageUri.new(src).allowed?
     end
 
     def user_link_if_exists(mention)
       username = mention.delete("@").downcase
       if User.find_by(username: username)
-        <<~HTML
+        <<~HTML.chomp
           <a class='mentioned-user' href='#{ApplicationConfig['APP_PROTOCOL']}#{Settings::General.app_domain}/#{username}'>@#{username}</a>
         HTML
       else

@@ -22,11 +22,14 @@ export const Article = ({
   isBookmarked,
   bookmarkClick,
   feedStyle,
+  pinned,
+  saveable,
 }) => {
   if (article && article.type_of === 'podcast_episodes') {
     return <PodcastArticle article={article} />;
   }
 
+  const isArticle = article.class_name === 'Article';
   const clickableClassList = [
     'crayons-story',
     'crayons-story__top',
@@ -51,10 +54,11 @@ export const Article = ({
         isFeatured ? ' crayons-story--featured' : ''
       }`}
       id={isFeatured ? 'featured-story-marker' : `article-${article.id}`}
+      data-feed-content-id={isArticle ? article.id : null}
       data-content-user-id={article.user_id}
     >
       <a
-        href={article.path}
+        href={article.url}
         aria-labelledby={`article-link-${article.id}`}
         className="crayons-story__hidden-navigation-link"
       >
@@ -67,9 +71,9 @@ export const Article = ({
           if (clickableClassList.includes(...classList)) {
             if (event.which > 1 || event.metaKey || event.ctrlKey) {
               // Indicates should open in _blank
-              window.open(article.path, '_blank');
+              window.open(article.url, '_blank');
             } else {
-              const fullUrl = window.location.origin + article.path; // InstantClick deals with full urls
+              const fullUrl = article.url; // InstantClick deals with full urls
               InstantClick.preload(fullUrl);
               InstantClick.display(fullUrl);
             }
@@ -79,10 +83,10 @@ export const Article = ({
         {article.cloudinary_video_url && <Video article={article} />}
 
         {showCover && <ArticleCoverImage article={article} />}
-        <div className="crayons-story__body">
+        <div className={`crayons-story__body crayons-story__body-${article.type_of}`}>
           <div className="crayons-story__top">
-            <Meta article={article} organization={article.organization} />
-            {article.pinned && (
+            {article.user && (<Meta article={article} organization={article.organization} />)}
+            {pinned && (
               <div
                 className="pinned color-accent-brand fw-bold"
                 data-testid="pinned-article"
@@ -106,32 +110,35 @@ export const Article = ({
 
           <div className="crayons-story__indention">
             <ContentTitle article={article} />
-            <TagList tags={article.tag_list} flare_tag={article.flare_tag} />
+            {article.type_of !== 'status' && (<TagList tags={article.tag_list} flare_tag={article.flare_tag} />)}
 
-            {article.class_name === 'Article' && (
+            {article.type_of === 'status' && article.body_preview && article.body_preview.length > 0 && (<div className='crayons-story__contentpreview text-styles' dangerouslySetInnerHTML={{__html: article.body_preview}} />)}
+
+            {isArticle && (
               // eslint-disable-next-line no-underscore-dangle
               <SearchSnippet highlightText={article.highlight} />
             )}
 
             <div className="crayons-story__bottom">
-              {article.class_name !== 'User' && (
+              {(article.class_name !== 'User' && article.user) && (
                 <div className="crayons-story__details">
                   <ReactionsCount article={article} />
                   <CommentsCount
                     count={article.comments_count}
-                    articlePath={article.path}
+                    articlePath={article.url}
                     articleTitle={article.title}
                   />
                 </div>
               )}
 
               <div className="crayons-story__save">
-                <ReadingTime readingTime={article.reading_time} />
+                <ReadingTime readingTime={article.reading_time} typeOf={article.type_of} />
 
                 <SaveButton
                   article={article}
                   isBookmarked={isBookmarked}
                   onClick={bookmarkClick}
+                  saveable={saveable}
                 />
               </div>
             </div>
@@ -141,7 +148,7 @@ export const Article = ({
         {article.top_comments && article.top_comments.length > 0 && (
           <CommentsList
             comments={article.top_comments}
-            articlePath={article.path}
+            articlePath={article.url}
             totalCount={article.comments_count}
           />
         )}
@@ -154,6 +161,7 @@ Article.defaultProps = {
   isBookmarked: false,
   isFeatured: false,
   feedStyle: 'basic',
+  saveable: true,
 };
 
 Article.propTypes = {
@@ -162,4 +170,6 @@ Article.propTypes = {
   isFeatured: PropTypes.bool,
   feedStyle: PropTypes.string,
   bookmarkClick: PropTypes.func.isRequired,
+  pinned: PropTypes.bool,
+  saveable: PropTypes.bool.isRequired,
 };

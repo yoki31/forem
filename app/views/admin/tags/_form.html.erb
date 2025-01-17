@@ -12,13 +12,16 @@
       <p class="crayons-field__description">Allows the tag to be a searchable result when writing a post or a listing</p>
     </label>
   </div>
+  <div class="crayons-field crayons-field--checkbox mt-3">
+    <%= f.check_box :suggested, class: "crayons-checkbox" %>
+    <label class="crayons-field__label" for="tag_suggested">
+      Suggested
+      <p class="crayons-field__description">Prioritizes the tag during user onboarding</p>
+    </label>
+  </div>
   <div class="crayons-field mt-3">
     <%= f.label :badge_id, class: "crayons-field__label" %>
     <%= f.select(:badge_id, options_for_select(badges_for_options, tag.badge_id), { include_blank: true }, { class: "crayons-select" }) %>
-  </div>
-  <div class="crayons-field mt-3">
-    <%= f.label :social_preview_template, class: "crayons-field__label" %>
-    <%= f.select(:social_preview_template, Tag.social_preview_templates, {}, { class: "crayons-select" }) %>
   </div>
   <div class="crayons-field mt-3">
     <%= f.label :alias_for, class: "crayons-field__label" %>
@@ -48,20 +51,12 @@
     <%= f.label :wiki_body_markdown, class: "crayons-field__label" %>
     <%= f.text_area :wiki_body_markdown, value: tag.wiki_body_markdown, class: "crayons-textfield" %>
   </div>
-  <div class="crayons-notice crayons-notice--warning mt-3">We will soon update how tags are being displayed. Please define tag's primary color in "Bg color hex" field - the other one ("Text color hex") will be deprecated.</div>
   <div class="crayons-field mt-3">
-    <%= f.label :bg_color_hex, class: "crayons-field__label" %>
+    <%= f.label :bg_color_hex, "Tag color", class: "crayons-field__label" %>
     <div class="flex items-center w-100 m:w-50">
-      <%= f.text_field :bg_color_hex, class: "crayons-textfield", value: tag.bg_color_hex.presence || "#000000", placeholder: "#000000" %>
-      <%= f.color_field :bg_color_hex, class: "crayons-color-selector ml-2", required: true, value: tag.bg_color_hex.presence || "#000000", placeholder: "#000000" %>
-    </div>
-  </div>
-  <div class="crayons-field mt-3">
-    <%= f.label :text_color_hex, class: "crayons-field__label" %>
-    <div class="flex items-center w-100 m:w-50">
-      <%= f.text_field :text_color_hex, class: "crayons-textfield", value: tag.text_color_hex.presence || "#ffffff", placeholder: "#ffffff" %>
-      <%= f.color_field :text_color_hex, class: "crayons-color-selector ml-2", required: true, value: tag.text_color_hex.presence || "#ffffff", placeholder: "#ffffff" %>
+      <%= f.text_field :bg_color_hex, class: "crayons-textfield", value: tag.bg_color_hex.presence || "#000000", placeholder: "#000000", data: { color_picker: true, label_text: "Tag color" } %>
     </div>
   </div>
   <%= f.submit class: "crayons-btn mt-3" %>
 <% end %>
+<%= javascript_include_tag "enhanceColorPickers", defer: true %>

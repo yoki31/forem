@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Search", type: :request, proper_status: true do
+RSpec.describe "Search", :proper_status do
   let(:authorized_user) { create(:user) }
 
   describe "GET /search/tags" do
@@ -157,6 +157,21 @@ RSpec.describe "Search", type: :request, proper_status: true do
 
         expect(Search::Article).to have_received(:search_documents)
       end
+
+      it "nullifies invalid sort directions" do
+        allow(Search::Article).to receive(:search_documents).and_call_original
+        article = create(:article)
+
+        get search_feed_content_path(
+          class_name: "Article", page: 0, per_page: 1, search_fields: article.title,
+          sort_by: :published_at, sort_direction: :invalid
+        )
+
+        expect(response.parsed_body["result"].first["id"]).to eq(article.id)
+        expect(Search::Article)
+          .to have_received(:search_documents)
+          .with(hash_including(sort_direction: nil))
+      end
     end
 
     context "when searching for comments" do
@@ -217,6 +232,26 @@ RSpec.describe "Search", type: :request, proper_status: true do
         )
 
         expect(response.parsed_body["result"].first).to include("body_text" => podcast_episode.body_text)
+      end
+    end
+
+    context "when using searching for tags" do
+      let!(:tag) { create(:tag, name: "webdev") }
+
+      it "returns the correct keys for tags" do
+        get search_feed_content_path(search_fields: "web", class_name: "Tag")
+        expect(response.parsed_body["result"]).to be_present
+      end
+
+      it "supports the search params for tags" do
+        get search_feed_content_path(
+          search_fields: "web",
+          class_name: "Tag",
+          page: 0,
+          per_page: 1,
+        )
+
+        expect(response.parsed_body["result"].first).to include("name" => tag.name)
       end
     end
   end

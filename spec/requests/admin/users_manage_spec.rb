@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Admin::Users", type: :request do
+RSpec.describe "Admin::Users" do
   let!(:user) { create(:user, twitter_username: nil, old_username: "username") }
   let!(:user2) { create(:user, twitter_username: "Twitter") }
   let(:user3) { create(:user) }
@@ -109,6 +109,8 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "merges an identity on a single account into the other" do
+      omniauth_mock_twitter_payload
+      omniauth_mock_github_payload
       create(:identity, user: user, provider: "twitter")
       deleted_user_identity = create(:identity, user: user2)
 
@@ -121,18 +123,26 @@ RSpec.describe "Admin::Users", type: :request do
 
   context "when managing activity and roles" do
     it "adds comment suspend role" do
-      params = { user: { user_status: "Comment Suspend", note_for_current_role: "comment suspend this user" } }
+      params = { user: { user_status: "Comment Suspended", note_for_current_role: "comment suspend this user" } }
       patch user_status_admin_user_path(user.id), params: params
 
       expect(user.roles.first.name).to eq("comment_suspended")
       expect(Note.first.content).to eq("comment suspend this user")
     end
 
+    it "adds limited role" do
+      params = { user: { user_status: "Limited", note_for_current_role: "limited role added" } }
+      patch user_status_admin_user_path(user.id), params: params
+
+      expect(user.roles.first.name).to eq("limited")
+      expect(Note.first.content).to eq("limited role added")
+    end
+
     it "selects new role for user" do
       user.add_role(:trusted)
       user.reload
 
-      params = { user: { user_status: "Comment Suspend", note_for_current_role: "comment suspend this user" } }
+      params = { user: { user_status: "Comment Suspended", note_for_current_role: "comment suspend this user" } }
       patch user_status_admin_user_path(user.id), params: params
 
       expect(user.roles.count).to eq(1)
@@ -146,7 +156,7 @@ RSpec.describe "Admin::Users", type: :request do
       params = { user: { user_status: "Super Admin", note_for_current_role: "they deserve it for some reason" } }
       patch user_status_admin_user_path(user.id), params: params
 
-      expect(user.has_role?(:super_admin)).to be(true)
+      expect(user.super_admin?).to be(true)
     end
 
     it "does not allow non-super-admin to doll out admin" do
@@ -157,7 +167,7 @@ RSpec.describe "Admin::Users", type: :request do
       params = { user: { user_status: "Super Admin", note_for_current_role: "they deserve it for some reason" } }
       patch user_status_admin_user_path(user.id), params: params
 
-      expect(user.has_role?(:super_admin)).not_to be false
+      expect(user.super_admin?).not_to be false
     end
 
     it "creates a general note on the user" do
@@ -172,50 +182,73 @@ RSpec.describe "Admin::Users", type: :request do
     end
 
     it "removes non-admin roles from non-super_admin users", :aggregate_failures do
-      user.add_role(:trusted)
+      role = user.add_role(:trusted)
 
       expect do
-        delete admin_user_path(user.id), params: { user_id: user.id, role: :trusted }
+        delete admin_user_path(user.id), params: { user_id: user.id, role_id: role.id }
       end.to change(user.roles, :count).by(-1)
 
-      expect(user.has_role?(:trusted)).to be false
+      expect(user.has_trusted_role?).to be false
       expect(request.flash["success"]).to include("successfully removed from the user!")
     end
 
     it "removes the correct resource_admin_role from non-super_admin users", :aggregate_failures do
-      user.add_role(:single_resource_admin, Comment)
+      role = user.add_role(:single_resource_admin, Comment)
       user.add_role(:single_resource_admin, Broadcast)
 
       expect do
         delete admin_user_path(user.id),
-               params: { user_id: user.id, role: :single_resource_admin, resource_type: Comment }
+               params: { user_id: user.id, role_id: role.id, resource_type: Comment }
       end.to change(user.roles, :count).by(-1)
 
-      expect(user.has_role?(:single_resource_admin, Comment)).to be false
-      expect(user.has_role?(:single_resource_admin, Broadcast)).to be true
+      expect(user.single_resource_admin_for?(Comment)).to be false
+      expect(user.single_resource_admin_for?(Broadcast)).to be true
       expect(request.flash["success"]).to include("successfully removed from the user!")
     end
 
-    it "does not allow super_admin roles to be removed", :aggregate_failures do
-      user.add_role(:super_admin)
+    it "removes tag mod role (resource_type and resource_id passed)" do
+      tag = create(:tag)
+      role = user.add_role(:tag_moderator, tag)
 
       expect do
-        delete admin_user_path(user.id), params: { user_id: user.id, role: :super_admin }
-      end.not_to change(user.roles, :count)
-
-      expect(user.has_role?(:super_admin)).to be true
-      expect(request.flash["danger"]).to include("cannot be removed.")
+        delete admin_user_path(user.id),
+               params: { user_id: user.id, role_id: role.id, resource_type: "Tag", resource_id: tag.id }
+      end.to change(user.roles, :count).by(-1)
     end
 
-    it "does not allow a admins to remove a role from themselves", :aggregate_failures do
-      super_admin.add_role(:trusted)
+    it "doesn't remove other tag mod role" do
+      tag = create(:tag)
+      tag2 = create(:tag)
+      role = user.add_role(:tag_moderator, tag)
+      role = user.add_role(:tag_moderator, tag2)
 
       expect do
-        delete admin_user_path(super_admin.id), params: { user_id: super_admin.id, role: :trusted }
-      end.not_to change(super_admin.roles, :count)
+        delete admin_user_path(user.id),
+               params: { user_id: user.id, role_id: role.id, resource_type: "Tag", resource_id: tag.id }
+      end.to change(user.roles, :count).by(-1)
 
-      expect(super_admin.has_role?(:trusted)).to be true
-      expect(request.flash["danger"]).to include("cannot remove roles")
+      user.reload
+      expect(user.tag_moderator?(tag: tag2)).to be true
+    end
+  end
+
+  context "when adding tag moderator role" do
+    let(:tag) { create(:tag, name: "ruby") }
+
+    it "adds role", :aggregate_failures do
+      params = { user: { tag_name: tag.name } }
+      post add_tag_mod_role_admin_user_path(user.id), params: params
+      user.reload
+      expect(user.tag_moderator?(tag: tag)).to be true
+      expect(response).to redirect_to(admin_user_path(user.id))
+    end
+
+    it "displays tag not found message", :aggregate_failures do
+      tag_name = "su#{tag.name}per"
+      params = { user: { tag_name: tag_name } }
+      post add_tag_mod_role_admin_user_path(user.id), params: params
+      expect(flash[:error]).to include("Error: Tag \"#{tag_name}\" was not found")
+      expect(response).to redirect_to(admin_user_path(user.id))
     end
   end
 
@@ -306,4 +339,5 @@ RSpec.describe "Admin::Users", type: :request do
       expect(super_admin.reload.unspent_credits_count).to eq 5
     end
   end
+  # rubocop:enable RSpec/IndexedLet
 end

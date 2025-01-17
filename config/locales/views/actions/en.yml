@@ -4,7 +4,6 @@ en:
     actions:
       copy:
         text: Copied to Clipboard
-        title: Copy article link to the clipboard
         button: Copy link
       more:
         title: More...
@@ -16,10 +15,12 @@ en:
           text: Share to Hacker News
         linkedin:
           text: Share to LinkedIn
+        mastodon:
+          text: Share to Mastodon
         reddit:
           text: Share to Reddit
         twitter:
-          text: Share to Twitter
+          text: Share to X
           query: '"%{article}" by %{author}'
         link: Share Post via...
         report: Report Abuse

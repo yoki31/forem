@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe ConsumerApp, type: :model do
+RSpec.describe ConsumerApp do
   let(:consumer_app_android) { create(:consumer_app, platform: :android) }
   let(:consumer_app_ios) { create(:consumer_app, platform: :ios) }
 
@@ -41,9 +41,11 @@ RSpec.describe ConsumerApp, type: :model do
           platform: ConsumerApp::FOREM_APP_PLATFORMS.sample,
         )
         allow(ApplicationConfig).to receive(:[]).with("RPUSH_IOS_PEM").and_return("asdf123")
+        allow(ApplicationConfig).to receive(:[]).with("RPUSH_FCM_KEY").and_return("asdf123")
         expect(forem_consumer_app.operational?).to be(true)
 
         allow(ApplicationConfig).to receive(:[]).with("RPUSH_IOS_PEM").and_return(nil)
+        allow(ApplicationConfig).to receive(:[]).with("RPUSH_FCM_KEY").and_return(nil)
         expect(forem_consumer_app.operational?).to be(false)
       end
     end

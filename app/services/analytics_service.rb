@@ -73,12 +73,12 @@ class AnalyticsService
   )
 
   def load_data
-    @article_data = Article.published.where("#{user_or_org.class.name.downcase}_id" => user_or_org.id)
+    @article_data = Article.published.from_subforem.where("#{user_or_org.class.name.downcase}_id" => user_or_org.id)
     if @article_id
       @article_data = @article_data.where(id: @article_id)
 
       # check article_id is published and belongs to the user/org
-      raise ArgumentError, "You can't view this article's stats" unless @article_data.exists?
+      raise ArgumentError, I18n.t("services.analytics_service.no_stats") unless @article_data.exists?
 
       article_ids = [@article_id]
     else
@@ -91,7 +91,7 @@ class AnalyticsService
       .where("score > 0")
     @follow_data = Follow
       .where(followable_type: user_or_org.class.name, followable_id: user_or_org.id)
-    @reaction_data = Reaction.public_category
+    @reaction_data = Reaction.for_analytics
       .where(reactable_id: article_ids, reactable_type: "Article")
     @page_view_data = PageView.where(article_id: article_ids)
 

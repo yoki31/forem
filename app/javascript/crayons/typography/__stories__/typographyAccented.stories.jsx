@@ -3,7 +3,7 @@ import { h } from 'preact';
 import '../../storybook-utilities/designSystem.scss';
 import './typography.scss';
 
-import notes from './accented-typography.md';
+import notes from './accented-typography.mdx';
 
 export default {
   title: 'Fundamentals/Typography/2_Accent',
@@ -31,6 +31,4 @@ export const SampleTexts = () => (
   </div>
 );
 
-SampleTexts.story = {
-  name: 'sample texts',
-};
+SampleTexts.storyName = 'sample texts';

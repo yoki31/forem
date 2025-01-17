@@ -15,17 +15,17 @@ class StoriesController < ApplicationController
   }.freeze
 
   SIGNED_OUT_RECORD_COUNT = 60
+  REDIRECT_VIEW_PARAMS = %w[moderate admin].freeze
 
   before_action :authenticate_user!, except: %i[index show]
   before_action :set_cache_control_headers, only: %i[index show]
+  before_action :set_user_limit, only: %i[index show]
   before_action :redirect_to_lowercase_username, only: %i[index]
 
   rescue_from ArgumentError, with: :bad_request
 
   def index
     @page = (params[:page] || 1).to_i
-    @article_index = true
-
     return handle_user_or_organization_or_podcast_or_page_index if params[:username]
 
     handle_base_index
@@ -38,14 +38,33 @@ class StoriesController < ApplicationController
       handle_article_show
     elsif (@article = Article.find_by(slug: params[:slug])&.decorate)
       handle_possible_redirect
-    else
-      @podcast = Podcast.available.find_by!(slug: params[:username])
+    elsif (@podcast = Podcast.available.find_by(slug: params[:username]))
       @episode = @podcast.podcast_episodes.available.find_by!(slug: params[:slug])
       handle_podcast_show
+    elsif (@page = Page.find_by(slug: "#{params[:username]}/#{params[:slug]}", is_top_level_path: true))
+      handle_page_display
+    else
+      not_found
     end
   end
 
   private
+
+  # for spam content we need to remove cache control headers to access current_user to check admin access
+  # so that admins could have access to spam articles and profiles
+  def check_admin_access
+    unset_cache_control_headers if user_signed_in?
+    is_admin = user_signed_in? && current_user&.any_admin?
+    not_found unless is_admin
+  end
+
+  def set_user_limit
+    @user_limit = 50
+  end
+
+  def assign_hero_banner
+    @hero_billboard = Billboard.for_display(area: "home_hero", user_signed_in: user_signed_in?)
+  end
 
   def assign_hero_html
     return if Campaign.current.hero_html_variant_name.blank?
@@ -56,15 +75,8 @@ class StoriesController < ApplicationController
   end
 
   def get_latest_campaign_articles
-    campaign_articles_scope = Article.tagged_with(Campaign.current.featured_tags, any: true)
-      .where("published_at > ? AND score > ?", Settings::Campaign.articles_expiry_time.weeks.ago, 0)
-      .order(hotness_score: :desc)
-
-    requires_approval = Campaign.current.articles_require_approval?
-    campaign_articles_scope = campaign_articles_scope.where(approved: true) if requires_approval
-
-    @campaign_articles_count = campaign_articles_scope.count
-    @latest_campaign_articles = campaign_articles_scope.limit(5).pluck(:path, :title, :comments_count, :created_at)
+    @campaign_articles_count = Campaign.current.count
+    @latest_campaign_articles = Campaign.current.plucked_article_attributes
   end
 
   def redirect_to_changed_username_profile
@@ -87,7 +99,7 @@ class StoriesController < ApplicationController
     potential_username = params[:username].tr("@", "").downcase
     @user = User.find_by("old_username = ? OR old_old_username = ?", potential_username, potential_username)
     if @user&.articles&.find_by(slug: params[:slug])
-      redirect_permanently_to(URI.parse("/#{@user.username}/#{params[:slug]}").path)
+      redirect_permanently_to(Addressable::URI.parse("/#{@user.username}/#{params[:slug]}").path)
       return
     end
 
@@ -99,25 +111,24 @@ class StoriesController < ApplicationController
     @organization = Organization.find_by(slug: params[:username])
     @page = Page.find_by(slug: params[:username], is_top_level_path: true)
     if @podcast
-      Honeycomb.add_field("stories_route", "podcast")
       handle_podcast_index
     elsif @organization
-      Honeycomb.add_field("stories_route", "org")
       handle_organization_index
     elsif @page
       if FeatureFlag.accessible?(@page.feature_flag_name, current_user)
-        Honeycomb.add_field("stories_route", "page")
         handle_page_display
       else
         not_found
       end
     else
-      Honeycomb.add_field("stories_route", "user")
       handle_user_index
     end
   end
 
   def handle_page_display
+    redirect_page_if_different_subforem
+    return if performed?
+
     @story_show = true
     set_surrogate_key_header "show-page-#{params[:username]}"
 
@@ -131,10 +142,11 @@ class StoriesController < ApplicationController
   def handle_base_index
     @home_page = true
     assign_feed_stories unless user_signed_in? # Feed fetched async for signed-in users
+    assign_hero_banner
     assign_hero_html
     assign_podcasts
     get_latest_campaign_articles if Campaign.current.show_in_sidebar?
-    @article_index = true
+
     set_surrogate_key_header "main_app_home_page"
     set_cache_control_headers(600,
                               stale_while_revalidate: 30,
@@ -162,12 +174,20 @@ class StoriesController < ApplicationController
 
   def handle_organization_index
     @user = @organization
-    @stories = ArticleDecorator.decorate_collection(@organization.articles.published
+    @stories = ArticleDecorator.decorate_collection(@organization.articles.published.from_subforem
+      .includes(:distinct_reaction_categories, :subforem)
       .limited_column_select
       .order(published_at: :desc).page(@page).per(8))
     @organization_article_index = true
+    @organization_users = @organization.users.order(badge_achievements_count: :desc)
+    if !user_signed_in? && @organization_users.sum(:score).negative? && @stories.sum(&:score) <= 0
+      not_found
+    end
+    redirect_if_inactive_in_subforem_for_organization
+    return if performed?
+
     set_organization_json_ld
-    set_surrogate_key_header "articles-org-#{@organization.id}"
+    set_surrogate_key_header @organization.record_key
     render template: "organizations/show"
   end
 
@@ -179,28 +199,28 @@ class StoriesController < ApplicationController
     end
     not_found if @user.username.include?("spam_") && @user.decorate.fully_banished?
     not_found unless @user.registered
+
+    check_admin_access if @user.spam?
+
+    if !user_signed_in? && (@user.suspended? && @user.has_no_published_content?)
+      not_found
+    end
     assign_user_comments
     assign_user_stories
     @list_of = "articles"
     redirect_if_view_param
     return if performed?
 
+    redirect_if_inactive_in_subforem_for_user
+    return if performed?
+
     assign_user_github_repositories
 
-    # @badges_limit is here and is set to 6 because it determines how many badges we will display
-    # on Profile sidebar widget. If user has more badges, we hide them and let them be revealed
-    # by clicking "See more" button (because we want to save space etc..). But why 6 exactly?
-    # To make that widget look good:
-    #   - On desktop it will have 3 rows, each row with 2 badges.
-    #   - On mobile it will have 2 rows, each row with 3 badges.
-    # So it's always 6. If we make it higher or lower number, we would have to sacrifice UI:
-    #   - Let's say it's `4`. On mobile it would display two rows: 1st with 3 badges and
-    # 2nd with 1 badge (!) <-- and that would look off.
-    @badges_limit = 6
-    @profile = @user.profile.decorate
+    @grouped_badges = @user.badge_achievements.order(id: :desc).includes(:badge).group_by(&:badge_id)
+    @profile = @user&.profile&.decorate || Profile.create(user: @user)&.decorate
     @is_user_flagged = Reaction.where(user_id: session_current_user_id, reactable: @user).any?
 
-    set_surrogate_key_header "articles-user-#{@user.id}"
+    set_surrogate_key_header @user.record_key
     set_user_json_ld
 
     render template: "users/show"
@@ -217,18 +237,38 @@ class StoriesController < ApplicationController
   end
 
   def redirect_if_view_param
-    redirect_to admin_user_path(@user.id) if params[:view] == "moderate"
-    redirect_to edit_admin_user_path(@user.id) if params[:view] == "admin"
+    redirect_to admin_user_path(@user.id) if REDIRECT_VIEW_PARAMS.include?(params[:view])
   end
 
-  def redirect_if_show_view_param
+  def redirect_if_inactive_in_subforem_for_user
+    return unless @comments.none? &&
+                    @pinned_stories.none? &&
+                    @stories.none? &&
+                    RequestStore.store[:subforem_id] != RequestStore.store[:default_subforem_id]
+
+    subforem = Subforem.find(RequestStore.store[:default_subforem_id])
+    redirect_to URL.url(@user.username, subforem), allow_other_host: true, status: :moved_permanently
+  end
+
+  def redirect_if_inactive_in_subforem_for_organization
+    return unless @stories.none? &&
+                    RequestStore.store[:subforem_id] != RequestStore.store[:default_subforem_id]
+    
+    subforem = Subforem.find(RequestStore.store[:default_subforem_id])
+    redirect_to URL.url(@organization.slug, subforem), allow_other_host: true, status: :moved_permanently
+  end
+
+  def redirect_if_appropriate
+    if should_redirect_to_subforem?(@article)
+      redirect_to URL.article(@article), allow_other_host: true, status: :moved_permanently
+    end
     redirect_to admin_article_path(@article.id) if params[:view] == "moderate"
   end
 
   def handle_article_show
     assign_article_show_variables
     set_surrogate_key_header @article.record_key
-    redirect_if_show_view_param
+    redirect_if_appropriate
     return if performed?
 
     render template: "articles/show"
@@ -238,11 +278,12 @@ class StoriesController < ApplicationController
     if params[:timeframe].in?(Timeframe::FILTER_TIMEFRAMES)
       @stories = Articles::Feeds::Timeframe.call(params[:timeframe])
     elsif params[:timeframe] == Timeframe::LATEST_TIMEFRAME
-      @stories = Articles::Feeds::Latest.call
+      @stories = Articles::Feeds::Latest.call(minimum_score: Settings::UserExperience.home_feed_minimum_score)
     else
       @default_home_feed = true
       feed = Articles::Feeds::LargeForemExperimental.new(page: @page, tag: params[:tag])
       @featured_story, @stories = feed.featured_story_and_default_home_feed(user_signed_in: user_signed_in?)
+      @stories = @stories.to_a
     end
 
     @pinned_article = pinned_article&.decorate
@@ -255,6 +296,8 @@ class StoriesController < ApplicationController
     not_found if permission_denied?
     not_found unless @article.user
 
+    check_admin_access if @article.user.spam?
+
     @pinned_article_id = PinnedArticle.id
 
     @article_show = true
@@ -262,6 +305,9 @@ class StoriesController < ApplicationController
     @discussion_lock = @article.discussion_lock
     @user = @article.user
     @organization = @article.organization
+    @comments_order = fetch_sort_order
+
+    @comments_count = Comments::Count.call(@article)
 
     if @article.collection
       @collection = @article.collection
@@ -270,18 +316,19 @@ class StoriesController < ApplicationController
       # original publication date appear in the correct order in the collection,
       # considering non cross posted articles with a more recent publication date
       @collection_articles = @article.collection.articles
-        .published
+        .published.from_subforem
         .order(Arel.sql("COALESCE(crossposted_at, published_at) ASC"))
     end
 
     @comments_to_show_count = @article.cached_tag_list_array.include?("discuss") ? 50 : 30
+    @comments_to_show_count = 10 unless user_signed_in?
     set_article_json_ld
     assign_co_authors
     @comment = Comment.new(body_markdown: @article&.comment_template)
   end
 
   def permission_denied?
-    !@article.published && params[:preview] != @article.password
+    (!@article.published || @article.scheduled?) && params[:preview] != @article.password
   end
 
   def assign_co_authors
@@ -292,19 +339,23 @@ class StoriesController < ApplicationController
 
   def assign_user_comments
     comment_count = helpers.comment_count(params[:view])
-    @comments = if @user.comments_count.positive?
-                  @user.comments.where(deleted: false)
-                    .order(created_at: :desc).includes(:commentable).limit(comment_count)
-                else
-                  []
-                end
+    @comments = []
+    return unless user_signed_in? && @user.comments_count.positive?
+
+    @comments = @user.comments.good_quality.where(deleted: false)
+      .joins("INNER JOIN articles ON articles.id = comments.commentable_id AND comments.commentable_type = 'Article'")
+      .merge(Article.from_subforem)
+      .order(created_at: :desc)
+      .includes(commentable: [:podcast])
+      .limit(comment_count)
   end
 
   def assign_user_stories
-    @pinned_stories = Article.published.where(id: @user.profile_pins.select(:pinnable_id))
+    @pinned_stories = Article.published.from_subforem.full_posts.where(id: @user.profile_pins.select(:pinnable_id))
       .limited_column_select
       .order(published_at: :desc).decorate
-    @stories = ArticleDecorator.decorate_collection(@user.articles.published
+    @stories = ArticleDecorator.decorate_collection(@user.articles.published.from_subforem.full_posts
+      .includes(:distinct_reaction_categories, :subforem)
       .limited_column_select
       .where.not(id: @pinned_stories.map(&:id))
       .order(published_at: :desc).page(@page).per(user_signed_in? ? 2 : SIGNED_OUT_RECORD_COUNT))
@@ -325,9 +376,9 @@ class StoriesController < ApplicationController
   end
 
   def redirect_to_lowercase_username
-    return unless params[:username] && params[:username]&.match?(/[[:upper:]]/)
+    return unless params[:username]&.match?(/[[:upper:]]/)
 
-    redirect_permanently_to("/#{params[:username].downcase}")
+    redirect_permanently_to(action: :index, username: params[:username].downcase)
   end
 
   def set_user_json_ld
@@ -343,11 +394,11 @@ class StoriesController < ApplicationController
       },
       url: URL.user(@user),
       sameAs: user_same_as,
-      image: Images::Profile.call(@user.profile_image_url, length: 320),
+      image: @user.profile_image_url_for(length: 320),
       name: @user.name,
       email: decorated_user.profile_email,
       description: decorated_user.profile_summary
-    }.reject { |_, v| v.blank? }
+    }.compact_blank
   end
 
   def set_article_json_ld
@@ -405,9 +456,9 @@ class StoriesController < ApplicationController
         "@id": URL.organization(@organization)
       },
       url: URL.organization(@organization),
-      image: Images::Profile.call(@organization.profile_image_url, length: 320),
+      image: @organization.profile_image_url_for(length: 320),
       name: @organization.name,
-      description: @organization.summary.presence || "404 bio not found"
+      description: @organization.summary.presence || I18n.t("stories_controller.404_bio_not_found")
     }
   end
 
@@ -417,7 +468,13 @@ class StoriesController < ApplicationController
     [
       @user.twitter_username.present? ? "https://twitter.com/#{@user.twitter_username}" : nil,
       @user.github_username.present? ? "https://github.com/#{@user.github_username}" : nil,
-      @user.profile.website_url,
-    ].reject(&:blank?)
+      @user&.profile&.website_url,
+    ].compact_blank
+  end
+
+  def fetch_sort_order
+    return params[:comments_sort] if Comment::VALID_SORT_OPTIONS.include? params[:comments_sort]
+
+    "top"
   end
 end

@@ -4,13 +4,14 @@ fr:
     badges:
       meta:
         title: Badges
-        name: "%{title} Badge"
       all:
         one: Show one badge
         other: Show all %{count} badges
       heading: Badges
       desc: Receive badges for being awesome! Click on a badge to see how you can earn it.
-      name: "🏅 %{title} Badge 🏅"
+      icon_close: Close
+      gotit: Got it
+      indicator: "%{user} a obtenu ce badge %{number} fois."
     campaign:
       subtitle: Stories (%{count})
       view: See all posts
@@ -22,11 +23,17 @@ fr:
         back: Take me back
         again: Try again
         install: Install the app
+    email_subscriptions:
+      unsubscribe:
+        heading: "You have been unsubscribed from %{type}. 😔"
+        description_html: You will no longer receive emails like this. If you'd like to re-subscribe or manage your full email preferences, please %{link}.
+        link: click here
+      invalid:
+        heading: Token expired or invalid
+        description_html: Please %{signin} to manage your email preferences.
+        signin: sign-in
     hamburger:
       icon: Navigation menu
-      back: Back
-      forward: Forward
-      refresh: Refresh
       icon_close: Close
       icon_left: Left menu
       icon_right: Right menu
@@ -34,18 +41,14 @@ fr:
       color_1:
         label: Brand color 1
         description: Used for backgrounds, borders etc.
-        select:
-          aria_label: Brand color 1 color selector
-          label: Brand color 1 color select
       color_2:
         label: Brand color 2
         description_html: Used for texts (usually put on <em>Brand color 1</em>).
-        select:
-          aria_label: Brand color 2 color selector
-          label: Brand color 2 color select
       preview:
         icon: App logo
         text: 'Preview:'
+    mailers:
+      contact_mailto_html: Contactez-nous à l'adresse <a href="mailto:%{contact_email}">%{contact_email}</a> si nous pouvons vous aider davantage.
     onboardings:
       meta:
         title: Welcome to %{community}
@@ -55,11 +58,16 @@ fr:
       settings_html: "<span class=\"emoji\">💅🏼</span>Customize your profile"
       welcome_html: "<span class=\"emoji\">😊</span>Join the Welcome thread"
       write_html: "<span class=\"emoji\">✍🏾</span>Write your first %{community} post"
+      join_subscription_html: "<span class=\"emoji\">🚀</span>Join DEV++"
     pins:
       article: Épinglé
       pinned: "📌 Pinned! (pinned posts display chronologically, 5 max)"
       removed: "🗑 Pin removed"
       error: You can only have five pins
+    profile:
+      color:
+        label: Brand color
+        description: Used for backgrounds, borders etc.
     reading_list:
       meta:
         title: Reading List
@@ -79,13 +87,16 @@ fr:
         people: People
         comments: Comments
         my_posts: My posts only
+        organizations: Organizations
+        tags: Tags
       sort:
         aria_label: Search result sort options
         relevance: Most Relevant
         newest: Newest
         oldest: Oldest
       meta:
-        title: Search Results
+        title: Search Results%{for}
+        for: " for %{query}"
         description: "%{site} => Search Results"
     series:
       meta:
@@ -96,9 +107,23 @@ fr:
         heading: "%{series} Series' Articles"
         back: Back to %{user}'s Series
         empty: This series doesn't have any articles
-    sponsor:
-      icon: Love
-      seek: Become a sponsor
+    stats:
+      meta:
+        title: Stats for Your Article
+      heading_html: Stats for "%{article}"
+      period:
+        aria_label: Analytics period
+        week: Week
+        month: Month
+        infinity: Infinity
+      readers: Readers Summary
+      followers: New Followers Summary
+      reactions: "Reactions Summary ❤🦄🔖"
+      comments: "Comments Summary 💬"
+      traffic:
+        text: "Traffic Source Summary 🚦"
+        source: Source
+        views: Views
     sticky:
       joined: Rejoint
       default_cta: Learn more

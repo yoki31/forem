@@ -1,31 +1,38 @@
-# Update dependencies with Dependabot
-
 version: 2
 updates:
-  # Set update schedule for Ruby Bundler
-  - package-ecosystem: "bundler"
-    # Raise pull requests to update vendored dependencies that are checked in to the repository
-    vendor: true
-    directory: "/"
+  # RubyGems dependency updates (typically for Rails and other Ruby gems)
+  - package-ecosystem: "bundler" # for RubyGems
+    directory: "/" # path to the directory containing the Gemfile
     schedule:
-      interval: "daily"
-    ignore:
-      # Ignoring binding_of_caller 1.0 temporarily until we find a solution for it breaking Docker
-      # see <https://github.com/forem/forem/issues/12068>
-      - dependency-name: "binding_of_caller"
-        versions: [">= 1.0"]
-    labels: []
+      interval: "weekly" # frequency of update checks
+      day: "monday" # specify the day to check for updates
+      time: "04:00" # specify the time of day (in UTC) to check for updates
+    open-pull-requests-limit: 5 # limit the number of open pull requests
+    labels:
+      - "dependencies" # label to assign to pull requests
+      - "ruby"
+    milestone: 1 # ID of the milestone to assign to the pull requests if needed
 
-  # Set update schedule for Yarn/NPM
-  - package-ecosystem: "npm"
-    directory: "/"
+  # JavaScript dependency updates (for both npm and Yarn)
+  - package-ecosystem: "npm" # for JavaScript packages
+    directory: "/" # path to the directory containing the package.json and yarn.lock files
     schedule:
       interval: "weekly"
-    labels: []
+      day: "tuesday"
+      time: "04:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+    milestone: 1
 
-  # Set update schedule for GitHub Actions
-  # https://docs.github.com/en/free-pro-team@latest/github/administering-a-repository/keeping-your-actions-up-to-date-with-dependabot
+  # Configuration for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "daily"
+      interval: "monthly"
+      day: "monday" # change 'first' to a valid day of the week
+      time: "04:00"
+    labels:
+      - "dependencies"
+      - "github-actions"

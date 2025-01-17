@@ -7,12 +7,12 @@ module Slack
         %<reactable_url>s
       TEXT
 
-      def initialize(reaction:)
-        @reaction = reaction
-      end
-
       def self.call(...)
         new(...).call
+      end
+
+      def initialize(reaction:)
+        @reaction = reaction
       end
 
       def call
@@ -28,10 +28,10 @@ module Slack
         )
 
         Slack::Messengers::Worker.perform_async(
-          message: message,
-          channel: "abuse-reports",
-          username: "abuse_bot",
-          icon_emoji: ":cry:",
+          "message" => message,
+          "channel" => "abuse-reports",
+          "username" => "abuse_bot",
+          "icon_emoji" => ":cry:",
         )
       end
 

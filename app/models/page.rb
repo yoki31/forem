@@ -1,12 +1,21 @@
 class Page < ApplicationRecord
-  TEMPLATE_OPTIONS = %w[contained full_within_layout json].freeze
+  extend UniqueAcrossModels
+  TEMPLATE_OPTIONS = %w[contained full_within_layout nav_bar_included json css txt].freeze
+
+  TERMS_SLUG = "terms".freeze
+  CODE_OF_CONDUCT_SLUG = "code-of-conduct".freeze
+  PRIVACY_SLUG = "privacy".freeze
+  PAGE_DIRECTORY_LIMIT = 6
+
+  has_many :billboards, dependent: :nullify
+  belongs_to :subforem, optional: true
 
   validates :title, presence: true
   validates :description, presence: true
-  validates :slug, presence: true, format: /\A[0-9a-z\-_]*\z/
   validates :template, inclusion: { in: TEMPLATE_OPTIONS }
   validate :body_present
-  validate :unique_slug_including_users_and_orgs, if: :slug_changed?
+
+  validate :validate_slug_uniqueness
 
   before_validation :set_default_template
   before_save :evaluate_markdown
@@ -16,6 +25,35 @@ class Page < ApplicationRecord
 
   mount_uploader :social_image, ProfileImageUploader
   resourcify
+
+  scope :from_subforem, lambda { |subforem_id = nil|
+    subforem_id ||= RequestStore.store[:subforem_id]
+    where(subforem_id: [subforem_id, nil])
+  }
+
+  # @param slug [String]
+  #
+  # @return An HTML safe String.
+  #
+  # @yield Yield to the calling context if there's no Page match for slug.
+  #
+  # @raise LocalJumpError when no matching slug nor block given.
+  #
+  # @note Yes, treating this value as HTML safe is risky.  But we already opened that vector by
+  #       letting the administrator of pages write HTML.
+  #
+  # @todo Do we want to only allow certain slugs?
+  #
+  # rubocop:disable Rails/OutputSafety
+  def self.render_safe_html_for(slug:)
+    page = find_by(slug: slug)
+    if page
+      page.processed_html.html_safe
+    else
+      yield
+    end
+  end
+  # rubocop:enable Rails/OutputSafety
 
   def self.landing_page
     find_by(landing_page: true)
@@ -27,6 +65,12 @@ class Page < ApplicationRecord
 
   def feature_flag_name
     "page_#{slug}"
+  end
+
+  def as_json(...)
+    super(...).slice(*%w[id title slug description is_top_level_path landing_page
+                         body_html body_json body_markdown processed_html
+                         social_image template subforem_id])
   end
 
   private
@@ -45,21 +89,9 @@ class Page < ApplicationRecord
   end
 
   def body_present
-    return unless body_markdown.blank? && body_html.blank? && body_json.blank?
+    return unless body_markdown.blank? && body_html.blank? && body_json.blank? && body_css.blank?
 
-    errors.add(:body_markdown, "must exist if body_html or body_json doesn't exist.")
-  end
-
-  def unique_slug_including_users_and_orgs
-    slug_exists = (
-      User.exists?(username: slug) ||
-      Organization.exists?(slug: slug) ||
-      Podcast.exists?(slug: slug) ||
-      slug.include?("sitemap-")
-    )
-    return unless slug_exists
-
-    errors.add(:slug, "is taken.")
+    errors.add(:body_markdown, I18n.t("models.page.body_must_exist"))
   end
 
   # As there can only be one global landing page, we want to ensure that
@@ -73,5 +105,30 @@ class Page < ApplicationRecord
 
   def bust_cache
     Pages::BustCacheWorker.perform_async(slug)
+  end
+
+  def validate_slug_uniqueness
+    # Custom cross-model validation to allow for the same slug in different subforems for pages
+    return if Page.where(slug: slug).exists? && Page.where(slug: slug, subforem_id: subforem_id).where.not(id: id).none?
+
+    if Page.where(slug: slug, subforem_id: subforem_id).where.not(id: id).exists?
+      errors.add(:slug, "has already been taken")
+      return
+    end
+
+    if User.where(username: slug).exists? || Organization.where(slug: slug).exists? || Podcast.where(slug: slug).exists?
+      errors.add(:slug, "is already taken by another entity")
+      return
+    end
+
+    if slug.include?("sitemap-")
+      errors.add(:slug, "is taken by sitemap directory")
+      return
+    end
+
+    if slug.split("/").count > PAGE_DIRECTORY_LIMIT
+      errors.add(:slug, "has too many subdirectories")
+      return
+    end
   end
 end

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "/admin/moderation/mods", type: :request do
+RSpec.describe "/admin/moderation/mods" do
   let!(:admin) { create(:user, :admin) }
   let!(:regular_user) { create(:user) }
   let!(:moderator) { create(:user, :trusted) }
@@ -70,7 +70,7 @@ RSpec.describe "/admin/moderation/mods", type: :request do
 
     it "displays mod user" do
       put admin_mod_path(regular_user.id)
-      expect(regular_user.reload.has_role?(:trusted)).to eq true
+      expect(regular_user.reload.trusted?).to be true
     end
   end
 end

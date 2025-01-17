@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "User visits a podcast page", type: :system do
+RSpec.describe "User visits a podcast page" do
   let(:podcast) { create(:podcast) }
   let!(:podcast_episode1) { create(:podcast_episode, podcast_id: podcast.id, published_at: 2.hours.ago) }
   let!(:podcast_episode2) { create(:podcast_episode, podcast_id: podcast.id) }
@@ -16,12 +16,12 @@ RSpec.describe "User visits a podcast page", type: :system do
   end
 
   it "displays podcast episodes", js: true do
-    expect(page).to have_selector("a.crayons-card", visible: :visible, count: 2)
+    expect(page).to have_link(class: "crayons-card", visible: :visible, count: 2)
   end
 
   it "displays podcast publish_at" do
-    expect(page).to have_selector("time.published-at", count: 1)
-    expect(page).to have_selector("span.time-ago-indicator-initial-placeholder", count: 1)
+    expect(page).to have_selector("time.published-at")
+    expect(page).to have_selector("span.time-ago-indicator-initial-placeholder")
   end
 
   it "displays correct episodes" do

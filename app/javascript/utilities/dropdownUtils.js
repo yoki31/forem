@@ -53,7 +53,7 @@ const handleDropdownRepositions = () => {
 /**
  * Helper query string to identify interactive/focusable HTML elements
  */
-const INTERACTIVE_ELEMENTS_QUERY =
+export const INTERACTIVE_ELEMENTS_QUERY =
   'button, [href], input:not([type="hidden"]), select, textarea, [tabindex="0"]';
 
 /**
@@ -63,7 +63,7 @@ const INTERACTIVE_ELEMENTS_QUERY =
  * @param {string} args.triggerElementId The id of the button which activates the dropdown
  * @param {string} args.dropdownContent The id of the dropdown content element
  */
-const openDropdown = ({ triggerElementId, dropdownContentId }) => {
+export const openDropdown = ({ triggerElementId, dropdownContentId }) => {
   const dropdownContent = document.getElementById(dropdownContentId);
   const triggerElement = document.getElementById(triggerElementId);
 
@@ -84,7 +84,11 @@ const openDropdown = ({ triggerElementId, dropdownContentId }) => {
  * @param {string} args.dropdownContent The id of the dropdown content element
  * @param {Function} args.onClose Optional function for any side-effects which should occur on dropdown close
  */
-const closeDropdown = ({ triggerElementId, dropdownContentId, onClose }) => {
+export const closeDropdown = ({
+  triggerElementId,
+  dropdownContentId,
+  onClose,
+}) => {
   const dropdownContent = document.getElementById(dropdownContentId);
 
   if (!dropdownContent) {
@@ -125,7 +129,7 @@ export const initializeDropdown = ({
   const triggerButton = document.getElementById(triggerElementId);
   const dropdownContent = document.getElementById(dropdownContentId);
 
-  if (!triggerButton || !dropdownContent) {
+  if ((!triggerButton || !dropdownContent) || triggerButton.dataset.dropdownInitialized === 'true') {
     // The required props haven't been provided, do nothing
     return;
   }
@@ -134,6 +138,7 @@ export const initializeDropdown = ({
   triggerButton.setAttribute('aria-expanded', 'false');
   triggerButton.setAttribute('aria-controls', dropdownContentId);
   triggerButton.setAttribute('aria-haspopup', 'true');
+  triggerButton.setAttribute('data-dropdown-initialized', 'true');
 
   const keyUpListener = ({ key }) => {
     if (key === 'Escape') {
@@ -165,7 +170,10 @@ export const initializeDropdown = ({
 
   // Close the dropdown if user has clicked outside
   const clickOutsideListener = ({ target }) => {
+    // Get fresh handle every time, resulting in more streamlined functionality for cypress
+    const triggerButton = document.getElementById(triggerElementId);
     if (
+      triggerButton &&
       target !== triggerButton &&
       !dropdownContent.contains(target) &&
       !triggerButton.contains(target)
@@ -190,7 +198,7 @@ export const initializeDropdown = ({
     document.removeEventListener('click', clickOutsideListener);
   };
 
-  // Add the main trigger button toggle funcationality
+  // Add the main trigger button toggle functionality
   triggerButton.addEventListener('click', () => {
     if (
       document

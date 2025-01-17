@@ -3,8 +3,8 @@ module Stories
     rescue_from ArgumentError, with: :bad_request
 
     def index
-      @query = "...searching"
-      @article_index = true
+      @query = I18n.t("stories_controller.searching")
+
       @current_ordering = current_search_results_ordering
       set_surrogate_key_header "articles-page-with-query"
     end

@@ -1,19 +1,33 @@
 class DigestMailer < ApplicationMailer
-  default from: -> { email_from("Digest") }
+  default from: -> { email_from(I18n.t("mailers.digest_mailer.from")) }
 
   def digest_email
     @user = params[:user]
     @articles = params[:articles]
+    @billboards = params[:billboards]
     @unsubscribe = generate_unsubscribe_token(@user.id, :email_digest_periodic)
 
     subject = generate_title
+
+    # set sendgrid category in the header using smtp api
+    # https://docs.sendgrid.com/for-developers/sending-email/building-an-x-smtpapi-header
+    if ForemInstance.sendgrid_enabled?
+      smtpapi_header = { category: "Digest Email" }.to_json
+      headers["X-SMTPAPI"] = smtpapi_header
+    end
+
     mail(to: @user.email, subject: subject)
   end
 
   private
 
   def generate_title
-    "#{adjusted_title(@articles.first)} + #{@articles.size - 1} #{email_end_phrase} #{random_emoji}"
+    # Winner of digest_title_03_11
+    if ForemInstance.dev_to?
+      "#{@articles.first.title} | DEV Digest"
+    else
+      @articles.first.title
+    end
   end
 
   def adjusted_title(article)
@@ -30,23 +44,23 @@ class DigestMailer < ApplicationMailer
     # "more trending posts" won the previous split test
     # Included more often as per explore-exploit algorithm
     [
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "more trending #{community_name} posts",
-      "other posts you might like",
-      "other #{community_name} posts you might like",
-      "other trending #{community_name} posts",
-      "other top #{community_name} posts",
-      "more top #{community_name} posts",
-      "more top reads from the community",
-      "more top #{community_name} posts based on your interests",
-      "more trending #{community_name} posts picked for you",
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.other_posts"),
+      I18n.t("mailers.digest_mailer.other_community_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.other_trending_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.other_top_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_top_posts", community: community_name),
+      I18n.t("mailers.digest_mailer.more_top_posts_from"),
+      I18n.t("mailers.digest_mailer.more_top_posts_based", community: community_name),
+      I18n.t("mailers.digest_mailer.more_trending_posts_picked", community: community_name),
     ].sample
   end
 end

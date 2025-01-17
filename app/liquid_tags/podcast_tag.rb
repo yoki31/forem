@@ -22,6 +22,10 @@ class PodcastTag < LiquidTagBase
     rss: "https://temenos.com/globalassets/img/marketplace/temenos/rss/rss.png"
   }.freeze
 
+  def self.script
+    SCRIPT
+  end
+
   def initialize(_tag_name, link, _parse_context)
     super
     @episode = fetch_podcast(link)
@@ -36,10 +40,6 @@ class PodcastTag < LiquidTagBase
         podcast: @podcast
       },
     )
-  end
-
-  def self.script
-    SCRIPT
   end
 
   private
@@ -63,7 +63,7 @@ class PodcastTag < LiquidTagBase
   end
 
   def raise_error
-    raise StandardError, "Invalid podcast link"
+    raise StandardError, I18n.t("liquid_tags.podcast_tag.invalid_podcast_link")
   end
 end
 

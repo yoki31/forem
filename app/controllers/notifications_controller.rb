@@ -5,7 +5,6 @@ class NotificationsController < ApplicationController
   def index
     return unless user_signed_in?
 
-    @notifications_index = true
     @user = user_to_view
 
     @initial_page_size = 8
@@ -27,8 +26,7 @@ class NotificationsController < ApplicationController
                      else
                        @user.notifications
                      end
-
-    @notifications = @notifications.order(notified_at: :desc)
+    @notifications = @notifications.from_subforem.order(notified_at: :desc)
 
     # if offset based pagination is invoked by the frontend code, we filter out all earlier ones
     @notifications = @notifications.where("notified_at < ?", notified_at_offset) if notified_at_offset
@@ -47,7 +45,16 @@ class NotificationsController < ApplicationController
     # the first few notifications. After that the JS frontend code (see `initNotification.js`)
     # will call this action again by sending the offset id for the last known notifications, the result
     # will be the partial rendering of only the list of notifications that will be attached to the DOM by JS
-    render partial: "notifications_list" if notified_at_offset
+    if notified_at_offset
+      render partial: "notifications_list"
+    else
+      # [@jeremyf] I added an explicit render.  Before adding the explicit render, we relied on the
+      # implicit render cycle of Rails.  Which is fine, but it's very disarming to read `render
+      # partial: "notifications_list" if notified_at_offset` as the last line of the method.
+      #
+      # My hope is that this explicit render removes at least one future head scratch.
+      render "index"
+    end
   end
   # rubocop:enable Metrics/CyclomaticComplexity
   # rubocop:enable Metrics/PerceivedComplexity
@@ -55,7 +62,7 @@ class NotificationsController < ApplicationController
   private
 
   def user_to_view
-    if params[:username] && current_user.admin?
+    if params[:username] && current_user.super_admin?
       User.find_by(username: params[:username])
     else
       current_user
@@ -83,6 +90,6 @@ class NotificationsController < ApplicationController
   end
 
   def allowed_user?
-    @user.org_member?(params[:org_id]) || @user.admin?
+    @user.org_member?(params[:org_id]) || @user.super_admin?
   end
 end

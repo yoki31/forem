@@ -12,24 +12,24 @@ module Authentication
   # 2. update an existing user and align it to its authentication identity
   # 3. return the current user if a user is given (already logged in scenario)
   class Authenticator
+    # @api public
+    #
+    # @see #initialize method for parameters
+    #
+    # @return [User] when the given provider is valid
+    #
+    # @raise [Authentication::Errors::PreviouslySuspended] when the user was already suspended
+    # @raise [Authentication::Errors::SpammyEmailDomain] when the associated email is spammy
+    def self.call(...)
+      new(...).call
+    end
+
     # auth_payload is the payload schema, see https://github.com/omniauth/omniauth/wiki/Auth-Hash-Schema
     def initialize(auth_payload, current_user: nil, cta_variant: nil)
       @provider = load_authentication_provider(auth_payload)
 
       @current_user = current_user
       @cta_variant = cta_variant
-    end
-
-    # @api public
-    #
-    # @see #initialize method for parameters
-    #
-    # @return user [User] when the given provider is valid
-    #
-    # @raises [Authentication::Errors::PreviouslySuspended] when the user was already suspended
-    # @raises [Authentication::Errors::SpammyEmailDomain] when the associated email is spammy
-    def self.call(...)
-      new(...).call
     end
 
     # @api private
@@ -51,6 +51,7 @@ module Authentication
                else
                  update_user(user)
                end
+        user.set_initial_roles!
 
         identity.user = user if identity.user_id.blank?
         new_identity = identity.new_record?
@@ -58,8 +59,6 @@ module Authentication
 
         log_to_datadog = new_identity && successful_save
         id_provider = identity.provider
-
-        user.skip_confirmation!
 
         flag_spam_user(user) if account_less_than_a_week_old?(user, identity)
 
@@ -88,7 +87,7 @@ module Authentication
       return unless domain
       return if Settings::Authentication.acceptable_domain?(domain: domain)
 
-      message = "This #{identity.provider} email address #{identity.email} has been marked as spam"
+      message = I18n.t("services.authentication.authenticator.not_allowed")
 
       raise Authentication::Errors::SpammyEmailDomain, message
     end
@@ -107,11 +106,15 @@ module Authentication
 
     def proper_user(identity)
       if current_user
+        Rails.logger.debug { "Current user exists: #{current_user.id}" }
         current_user
       elsif identity.user
+        Rails.logger.debug { "Identity user found: #{identity.user.id}" }
         identity.user
       elsif provider.user_email.present?
-        User.find_by(email: provider.user_email)
+        user = User.find_by(email: provider.user_email)
+        Rails.logger.debug { "User found by email: #{user&.id}" }
+        user
       end
     end
 
@@ -120,9 +123,9 @@ module Authentication
       suspended_user = Users::SuspendedUsername.previously_suspended?(username)
       raise ::Authentication::Errors::PreviouslySuspended if suspended_user
 
-      existing_user = User.where(
+      existing_user = User.find_by(
         provider.user_username_field => username,
-      ).take
+      )
       return existing_user if existing_user
 
       User.new.tap do |user|
@@ -130,10 +133,11 @@ module Authentication
         user.assign_attributes(default_user_fields)
 
         user.set_remember_fields
+        user.skip_confirmation!
 
         # The user must be saved in the database before
         # we assign the user to a new identity.
-        user.save!
+        user.new_record? ? user.save! : user.save # Throw excption if new record.
       end
     end
 
@@ -149,9 +153,20 @@ module Authentication
     end
 
     def update_user(user)
+      return user if user.spam_or_suspended?
+
       user.tap do |model|
         model.unlock_access! if model.access_locked?
-        model.assign_attributes(provider.existing_user_data)
+
+        if model.confirmed?
+          # We don't want to update users' email or any other fields if they're
+          # connecting an existing account that already has a confirmed email.
+          model.assign_attributes(provider.existing_user_data.except(:email))
+        else
+          # If the user doesn't have a confirmed email we can update their email
+          # and trust it because the auth provider confirmed email ownership
+          model.assign_attributes(provider.existing_user_data)
+        end
 
         update_profile_updated_at(model)
 

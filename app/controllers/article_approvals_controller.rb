@@ -2,8 +2,8 @@ class ArticleApprovalsController < ApplicationController
   def create
     @article = Article.find(params[:id])
     unless current_user.any_admin?
-      # Check that user is trusted
-      authorize(User, :moderation_routes?)
+      # Check that the article can be moderated by the user
+      authorize(@article, :moderate?)
       tags = @article.decorate.tags
       # Raise if no tags require approval to begin with
       raise Pundit::NotAuthorizedError unless tags.pluck(:requires_approval).include?(true)
@@ -14,6 +14,6 @@ class ArticleApprovalsController < ApplicationController
       end
     end
     @article.update(approved: params[:approved])
-    redirect_to "#{URI.parse(@article.path).path}/mod"
+    redirect_to "#{Addressable::URI.parse(@article.path).path}/mod"
   end
 end

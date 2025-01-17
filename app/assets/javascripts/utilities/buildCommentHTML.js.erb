@@ -1,6 +1,6 @@
 function buildCommentHTML(comment) {
   var iconSmallOverflowHorizontal = `<svg width="24" height="24" viewBox="0 0 24 24" class="crayons-icon pointer-events-none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.25 12a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm5.25 0a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zm3.75 1.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" /></svg>`;
-  var iconCollaspe = `<svg width="24" height="24" class="crayons-icon expanded" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 10.6771L8 6.93529L8.99982 6L12 8.80653L15.0002 6L16 6.93529L12 10.6771ZM12 15.1935L8.99982 18L8 17.0647L12 13.3229L16 17.0647L15.0002 17.9993L12 15.1935Z" /></svg>`;
+  var iconCollapse = `<svg width="24" height="24" class="crayons-icon expanded" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 10.6771L8 6.93529L8.99982 6L12 8.80653L15.0002 6L16 6.93529L12 10.6771ZM12 15.1935L8.99982 18L8 17.0647L12 13.3229L16 17.0647L15.0002 17.9993L12 15.1935Z" /></svg>`;
   var iconExpand = `<svg width="24" height="24" class="crayons-icon collapsed" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 18L8 14.2287L8.99982 13.286L12 16.1147L15.0002 13.286L16 14.2287L12 18ZM12 7.88533L8.99982 10.714L8 9.77133L12 6L16 9.77133L15.0002 10.7133L12 7.88533Z" /></svg>`;
 
   var depthClass = "";
@@ -13,6 +13,7 @@ function buildCommentHTML(comment) {
   var commentFooter = "";
   var commentAvatar = "";
   var commentBody = "";
+  var subscriptionIcon = "";
 
   if ( comment.depth == 0 ) {
     depthClass += "root ";
@@ -28,12 +29,16 @@ function buildCommentHTML(comment) {
     customClass = "comment-created-via-fetch"
   }
 
+  if (comment.user.cached_base_subscriber) {
+    subscriptionIcon = ` <img class='subscription-icon' src='${document.body.dataset.subscriptionIcon}' alt='Subscriber' />`;
+  }
+
   if (comment.depth < 3) {
     detailsStartHTML = `
       <details class="comment-wrapper comment-wrapper--deep-${ comment.depth } js-comment-wrapper" open>
-        <summary aria-label="Toggle this comment (and replies)">
+        <summary aria-label="Toggle this comment (and replies)" data-tracking-name="expand_comment_toggle">
           <span class="inline-block align-middle ${ comment.depth > 0 ? 'mx-0' : 'm:mx-1'}">
-            ${ iconCollaspe }
+            ${ iconCollapse }
             ${ iconExpand }
           </span>
           <span class="js-collapse-comment-content inline-block align-middle"></span>
@@ -51,18 +56,18 @@ function buildCommentHTML(comment) {
       <span class="js-comment-username">${ comment.user.name }</span>
     </a>
     <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
-      <button id="comment-profile-preview-trigger-${comment.id}" aria-controls="comment-profile-preview-content-${comment.id}" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost" aria-label="${comment.user.name} profile details">${comment.user.name}</button>
+      <button id="comment-profile-preview-trigger-${comment.id}" aria-controls="comment-profile-preview-content-${comment.id}" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost" aria-label="${comment.user.name} profile details">${comment.user.name}${subscriptionIcon}</button>
       <span data-js-comment-user-id="${comment.user.id}" data-js-dropdown-content-id="comment-profile-preview-content-${comment.id}" class="preview-card-placeholder"></span>
     </div>
     <span class="color-base-30 px-2 m:pl-0" role="presentation">&bull;</span>
 
     <a href="${ comment.url }" class="comment-date crayons-link crayons-link--secondary fs-s">
-      <time datetime="${ comment.published_timestamp }">
+      <time datetime="${ comment.published_timestamp }" class="date-no-year">
         ${ comment.readable_publish_date }
       </time>
     </a>
 
-    <div class="comment__dropdown">
+    <div class="comment__dropdown" data-tracking-name="comment_dropdown">
       <button  id="comment-dropdown-trigger-${comment.id}" aria-controls="comment-dropdown-${comment.id}" aria-expanded="false" class="dropbtn comment__dropdown-trigger crayons-btn crayons-btn--s crayons-btn--ghost crayons-btn--icon" aria-label="Toggle dropdown menu" aria-haspopup="true">
         ${ iconSmallOverflowHorizontal }
       </button>
@@ -109,6 +114,7 @@ function reply(comment) {
     href="#${ comment.url }"
     data-comment-id="${ comment.id }"
     data-path="${ comment.url }"
+    data-tracking-name="comment_reply_button"
     rel="nofollow">
     ${ iconSmallComment }
     <span class="hidden m:inline-block">Reply</span>
@@ -120,23 +126,26 @@ function reply(comment) {
 
 function react(comment) {
   var reactedClass = "";
-  var num = 1;
+  var num = 0;
   var iconSmallHeart = `<svg width="24" height="24" xmlns="http://www.w3.org/2000/svg" class="crayons-icon reaction-icon not-reacted"><path d="M18.884 12.595l.01.011L12 19.5l-6.894-6.894.01-.01A4.875 4.875 0 0112 5.73a4.875 4.875 0 016.884 6.865zM6.431 7.037a3.375 3.375 0 000 4.773L12 17.38l5.569-5.569a3.375 3.375 0 10-4.773-4.773L9.613 10.22l-1.06-1.062 2.371-2.372a3.375 3.375 0 00-4.492.25v.001z"/></svg>`;
   var iconSmallHeartFilled = `<svg width="24" height="24" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="crayons-icon reaction-icon--like reaction-icon reacted"><path d="M5.116 12.595a4.875 4.875 0 015.56-7.68h-.002L7.493 8.098l1.06 1.061 3.181-3.182a4.875 4.875 0 016.895 6.894L12 19.5l-6.894-6.894.01-.01z"/></svg>`;
 
-  if (!comment.newly_created && comment.heart_ids.indexOf(userData().id) > -1) {
-    reactedClass = "reacted"
-  }
-
-  if (!comment.newly_created) {
+  if (comment.newly_created) {
+    num = 1;
+  } else {
     num = comment.public_reactions_count;
   }
 
-  var reactButton = `<button class="crayons-btn crayons-btn--ghost crayons-btn--icon-left crayons-btn--s mr-1 reaction-like inline-flex reaction-button" id="button-for-comment-${ comment.id }" data-comment-id="${ comment.id }">
+  if (comment.newly_created || comment.heart_ids.indexOf(userData().id) > -1) {
+    reactedClass = "reacted"
+  }
+
+  var reactButton = `<button class="crayons-tooltip__activator crayons-btn crayons-btn--ghost crayons-btn--icon${num === 0 ? '' : '--left'} crayons-btn--s mr-1 reaction-like inline-flex reaction-button" id="button-for-comment-${ comment.id }" data-comment-id="${ comment.id }" data-tracking-name="comment_heart_button">
     ${ iconSmallHeart }
     ${ iconSmallHeartFilled }
     <span class="reactions-count" id="reactions-count-${ comment.id }">${ num }</span>
-    <span class="reactions-label hidden m:inline-block">like</span>
+    ${ num > 0 ? '<span class="reactions-label hidden m:inline-block">like</span>' : ''}
+    <span data-testid="tooltip" class="crayons-tooltip__content">Like</span>
   </button>`;
 
   return reactButton;

@@ -21,10 +21,22 @@ class Follow < ApplicationRecord
   scope :followable_user, ->(id) { where(followable_id: id, followable_type: "User") }
   scope :followable_tag, ->(id) { where(followable_id: id, followable_type: "ActsAsTaggableOn::Tag") }
 
+  # NOTE: These assume that we have one follower_type (as defined by acts_as_follower).
   scope :follower_user, ->(id) { where(follower_id: id, followable_type: "User") }
   scope :follower_organization, ->(id) { where(follower_id: id, followable_type: "Organization") }
   scope :follower_podcast, ->(id) { where(follower_id: id, followable_type: "Podcast") }
   scope :follower_tag, ->(id) { where(follower_id: id, followable_type: "ActsAsTaggableOn::Tag") }
+
+  # Follows from users who don't have suspended or spam role
+  scope :non_suspended, lambda { |followable_type, followable_id|
+    joins("INNER JOIN users ON users.id = follows.follower_id")
+      .joins("LEFT JOIN users_roles ON users_roles.user_id = users.id")
+      .joins("LEFT JOIN roles ON roles.id = users_roles.role_id")
+      .where(followable_type: followable_type, followable_id: followable_id)
+      .where("follows.follower_type = 'User'")
+      .where("roles.name NOT IN (?) OR roles.name IS NULL", %w[suspended spam])
+      .distinct
+  }
 
   counter_culture :follower, column_name: proc { |follow| COUNTER_CULTURE_COLUMN_NAME_BY_TYPE[follow.followable_type] },
                              column_names: COUNTER_CULTURE_COLUMNS_NAMES
@@ -33,9 +45,7 @@ class Follow < ApplicationRecord
   after_save :touch_follower
 
   validates :blocked, inclusion: { in: [true, false] }
-  validates :followable_id, presence: true
   validates :followable_type, presence: true
-  validates :follower_id, presence: true
   validates :follower_type, presence: true
   validates :subscription_status, presence: true, inclusion: { in: %w[all_articles none] }
 
@@ -54,6 +64,7 @@ class Follow < ApplicationRecord
   end
 
   def send_email_notification
+    return if follower&.badge_achievements_count&.zero? # Only email if follower is active enough to have received badge
     return unless followable.instance_of?(User) && followable.email?
 
     Follows::SendEmailNotificationWorker.perform_async(id)

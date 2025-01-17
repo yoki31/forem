@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "/admin/content_manager/podcasts", type: :request do
+RSpec.describe "/admin/content_manager/podcasts" do
   let(:admin) { create(:user, :super_admin) }
   let(:podcast) { create(:podcast, published: false) }
   let(:user) { create(:user) }
@@ -78,8 +78,8 @@ RSpec.describe "/admin/content_manager/podcasts", type: :request do
       expect(podcast.twitter_username).to eq("@ThePracticalDev")
       expect(podcast.main_color_hex).to eq("ffffff")
       expect(podcast.slug).to eq("postcast-test-url")
-      expect(podcast.reachable).to eq(true)
-      expect(podcast.published).to eq(true)
+      expect(podcast.reachable).to be(true)
+      expect(podcast.published).to be(true)
     end
     # rubocop:enable RSpec/MultipleExpectations
 
@@ -105,14 +105,14 @@ RSpec.describe "/admin/content_manager/podcasts", type: :request do
 
     it "schedules a worker to fetch episodes" do
       sidekiq_assert_enqueued_with(job: Podcasts::GetEpisodesWorker,
-                                   args: [{ podcast_id: podcast.id, limit: 5, force: false }]) do
+                                   args: [{ podcast_id: podcast.id, limit: 5, force_update: false }]) do
         post fetch_admin_podcast_path(podcast.id), params: { limit: "5", force: nil }
       end
     end
 
     it "schedules a worker without limit and with force" do
       sidekiq_assert_enqueued_with(job: Podcasts::GetEpisodesWorker,
-                                   args: [{ podcast_id: podcast.id, force: true, limit: nil }]) do
+                                   args: [{ podcast_id: podcast.id, force_update: true, limit: nil }]) do
         post fetch_admin_podcast_path(podcast.id), params: { force: "1", limit: "" }
       end
     end

@@ -9,7 +9,7 @@ module Articles
     def initialize(article, max: MAX_DEFAULT)
       @article = article
       @max = max
-      @total_articles_count = Article.published.estimated_count
+      @total_articles_count = Article.published.from_subforem.estimated_count
     end
 
     def call
@@ -37,9 +37,10 @@ module Articles
 
     def other_suggestions(max: MAX_DEFAULT, ids_to_ignore: [])
       ids_to_ignore << article.id
-      Article.published
+      Article.published.from_subforem
+        .where("published_at > ?", 3.months.ago)
         .where.not(id: ids_to_ignore)
-        .where.not(user_id: article.user_id)
+        .not_authored_by(article.user_id)
         .order(hotness_score: :desc)
         .offset(rand(0..offset))
         .first(max)
@@ -47,9 +48,10 @@ module Articles
 
     def suggestions_by_tag(max: MAX_DEFAULT)
       Article
-        .published
+        .published.from_subforem
+        .where("published_at > ?", 3.months.ago)
         .cached_tagged_with_any(cached_tag_list_array)
-        .where.not(user_id: article.user_id)
+        .not_authored_by(article.user_id)
         .where(tag_suggestion_query)
         .order(hotness_score: :desc)
         .offset(rand(0..offset))

@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe PodcastEpisodeAppearance, type: :model do
+RSpec.describe PodcastEpisodeAppearance do
   let(:podcast_episode_appearance) { create(:podcast_episode_appearance) }
 
   describe "validations" do
@@ -9,8 +9,6 @@ RSpec.describe PodcastEpisodeAppearance, type: :model do
     it { is_expected.to belong_to(:user).inverse_of(:podcast_episode_appearances) }
     it { is_expected.to belong_to(:podcast_episode) }
 
-    it { is_expected.to validate_presence_of(:podcast_episode_id) }
-    it { is_expected.to validate_presence_of(:user_id) }
     it { is_expected.to validate_presence_of(:role) }
 
     it do

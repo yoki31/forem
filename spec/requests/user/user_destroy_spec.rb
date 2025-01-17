@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "UserDestroy", type: :request do
+RSpec.describe "UserDestroy" do
   let(:user) { create(:user) }
 
   describe "GET /settings/account" do
@@ -33,7 +33,7 @@ RSpec.describe "UserDestroy", type: :request do
 
       it "signs out" do
         delete "/users/full_delete"
-        expect(controller.current_user).to eq nil
+        expect(controller.current_user).to be_nil
       end
 
       it "redirects to sign up" do

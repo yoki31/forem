@@ -5,15 +5,15 @@ module Notifications
     class Send
       include ActionView::Helpers::TextHelper
 
+      def self.call(...)
+        new(...).call
+      end
+
       def initialize(comment)
         @comment = comment
       end
 
       delegate :user_data, :comment_data, to: Notifications
-
-      def self.call(...)
-        new(...).call
-      end
 
       def call
         return if comment.score.negative?
@@ -31,18 +31,19 @@ module Notifications
             user_id: user_id,
             notifiable_id: comment.id,
             notifiable_type: comment.class.name,
+            subforem_id: comment.commentable.subforem_id,
             action: nil,
             json_data: json_data,
           )
         end
 
-        # Send PNs using Rpush - respecting users' notificaton delivery settings
+        # Send PNs using Rpush - respecting users' notification delivery settings
         targets = User.joins(:notification_setting)
           .where(id: user_ids, notification_setting: { mobile_comment_notifications: true }).ids
 
         PushNotifications::Send.call(
           user_ids: targets,
-          title: "💬 New Comment",
+          title: I18n.t("services.notifications.new_comment.new"),
           body: "#{I18n.t('views.notifications.comment.commented_html', user: comment.user.username,
                                                                         title: comment.commentable.title.strip)}:\n" \
                 "#{strip_tags(comment.processed_html).strip}",

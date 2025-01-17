@@ -1,21 +1,28 @@
 require "rails_helper"
 
-RSpec.describe Reaction, type: :model do
-  let(:user) { create(:user) }
+RSpec.describe Reaction do
+  let(:user) { create(:user, registered_at: 20.days.ago) }
   let(:article) { create(:article, user: user) }
-  let(:reaction) { build(:reaction, reactable: article) }
+  let(:reaction) { build(:reaction, reactable: article, user: user) }
 
   describe "builtin validations" do
     subject { build(:reaction, reactable: article, user: user) }
 
     it { is_expected.to belong_to(:user) }
-    it { is_expected.to validate_inclusion_of(:category).in_array(Reaction::CATEGORIES) }
+    it { is_expected.to validate_inclusion_of(:category).in_array(ReactionCategory.all_slugs.map(&:to_s)) }
     it { is_expected.to validate_uniqueness_of(:user_id).scoped_to(%i[reactable_id reactable_type category]) }
   end
 
-  describe ".user_has_been_given_too_many_spammy_reactions?" do
+  describe ".user_has_been_given_too_many_spammy_article_reactions?" do
     it "performs a valid query for the user" do
-      expect { described_class.user_has_been_given_too_many_spammy_reactions?(user: user) }.not_to raise_error
+      expect { described_class.user_has_been_given_too_many_spammy_article_reactions?(user: user) }.not_to raise_error
+    end
+
+    it "performs a valid query for the user with the include_user_profile logic" do
+      expect do
+        described_class.user_has_been_given_too_many_spammy_article_reactions?(user: user,
+                                                                               include_user_profile: true)
+      end.not_to raise_error
     end
   end
 
@@ -69,17 +76,6 @@ RSpec.describe Reaction, type: :model do
       expect(reaction).not_to be_valid
     end
 
-    it "assigns 0 points if reaction is invalid" do
-      reaction.update(status: "invalid")
-      expect(reaction.points).to eq(0)
-    end
-
-    it "assigns the correct points if reaction is confirmed" do
-      reaction_points = reaction.points
-      reaction.update(status: "confirmed")
-      expect(reaction.points).to eq(reaction_points * 2)
-    end
-
     context "when user is trusted" do
       before { reaction.user.add_role(:trusted) }
 
@@ -99,37 +95,30 @@ RSpec.describe Reaction, type: :model do
     let(:receiver) { build(:user) }
     let(:reaction) { build(:reaction, reactable: build(:article), user: nil) }
 
-    context "when false" do
-      it "is false when points are positive" do
-        reaction.points = 1
-        expect(reaction.skip_notification_for?(receiver)).to be(false)
-      end
-
-      it "is false when the person who reacted is not the same as the reactable owner" do
-        user_id = User.maximum(:id).to_i + 1
-        reaction.user_id = user_id
-        reaction.reactable.user_id = user_id + 1
-        expect(reaction.skip_notification_for?(user)).to be(false)
-      end
-
-      it "is false when receive_notifications is true" do
-        reaction.reactable.receive_notifications = true
-        expect(reaction.skip_notification_for?(receiver)).to be(false)
-      end
+    it "is normally false" do
+      expect(reaction.skip_notification_for?(receiver)).to be(false)
     end
 
-    context "when true" do
-      it "is true when points are negative" do
-        reaction.points = -2
-        expect(reaction.skip_notification_for?(receiver)).to be(true)
-      end
+    it "is true when points are negative" do
+      reaction.points = -2
+      expect(reaction.skip_notification_for?(receiver)).to be(true)
+    end
 
-      it "is true when the person who reacted is the same as the reactable owner" do
-        user_id = User.maximum(:id).to_i + 1
-        reaction.user_id = user_id
-        reaction.reactable.user_id = user_id
-        expect(reaction.skip_notification_for?(user)).to be(true)
-      end
+    it "is true when the person who reacted is the same as the reactable owner" do
+      user_id = User.maximum(:id).to_i + 1
+      reaction.user_id = user_id
+      reaction.reactable.user_id = user_id
+      expect(reaction.skip_notification_for?(user)).to be(true)
+    end
+
+    it "is true for inavlidated reactions" do
+      reaction.status = "invalid"
+      expect(reaction.skip_notification_for?(user)).to be(true)
+    end
+
+    it "is true when the reaction is a bookmark" do
+      reaction.category = "readinglist"
+      expect(reaction.skip_notification_for?(user)).to be(true)
     end
 
     context "when reactable is a user" do
@@ -155,14 +144,47 @@ RSpec.describe Reaction, type: :model do
 
       expected_result = [
         { category: "like", count: 1 },
-        { category: "readinglist", count: 0 },
         { category: "unicorn", count: 1 },
+        { category: "exploding_head", count: 0 },
+        { category: "fire", count: 0 },
+        { category: "raised_hands", count: 0 },
+        { category: "readinglist", count: 0 },
       ]
-      expect(described_class.count_for_article(article.id)).to eq(expected_result)
+      expect(described_class.count_for_article(article.id)).to match_array(expected_result)
     end
   end
 
   context "when callbacks are called after create" do
+    describe "field tests" do
+      let!(:user) { create(:user, :trusted) }
+
+      before do
+        # making sure there are no other enqueued jobs from other tests
+        sidekiq_perform_enqueued_jobs(only: Users::RecordFieldTestEventWorker)
+      end
+
+      it "enqueues a Users::RecordFieldTestEventWorker for giving a like to an article" do
+        article = create(:article, user: user)
+        sidekiq_assert_enqueued_jobs(1, only: Users::RecordFieldTestEventWorker) do
+          create(:reaction, reactable: article, user: user, category: "like")
+        end
+      end
+
+      it "does not enqueue a Users::RecordFieldTestEventWorker for giving a privileged reaction to an article" do
+        article = create(:article, user: user)
+        sidekiq_assert_enqueued_jobs(0, only: Users::RecordFieldTestEventWorker) do
+          create(:reaction, reactable: article, user: user, category: "thumbsdown")
+        end
+      end
+
+      it "does not enqueue a Users::RecordFieldTestEventWorker for giving a like to a comment" do
+        comment = create(:comment, user: user)
+        sidekiq_assert_enqueued_jobs(0, only: Users::RecordFieldTestEventWorker) do
+          create(:reaction, reactable: comment, user: user, category: "like")
+        end
+      end
+    end
+
     describe "slack messages" do
       let!(:user) { create(:user, :trusted) }
       let!(:article) { create(:article, user: user) }
@@ -220,7 +242,7 @@ RSpec.describe Reaction, type: :model do
   end
 
   context "when callbacks are called before destroy" do
-    let(:reaction) { create(:reaction, reactable: article, user: user) }
+    let!(:reaction) { create(:reaction, reactable: article, user: user) }
 
     it "enqueues a ScoreCalcWorker on article reaction destroy" do
       sidekiq_assert_enqueued_with(job: Articles::ScoreCalcWorker, args: [article.id]) do
@@ -228,16 +250,29 @@ RSpec.describe Reaction, type: :model do
       end
     end
 
-    it "updates reactable without delay" do
-      allow(reaction).to receive(:update_reactable_without_delay)
+    it "updates reactable with delay" do
+      allow(Reactions::UpdateRelevantScoresWorker).to receive(:perform_async)
       reaction.destroy
-      expect(reaction).to have_received(:update_reactable_without_delay)
+      expect(Reactions::UpdateRelevantScoresWorker).to have_received(:perform_async)
     end
 
     it "busts reactable cache without delay" do
       allow(reaction).to receive(:bust_reactable_cache_without_delay)
       reaction.destroy
       expect(reaction).to have_received(:bust_reactable_cache_without_delay)
+    end
+
+    it "busts article if it is the last public reaction" do
+      allow(EdgeCache::BustArticle).to receive(:call)
+      reaction.destroy
+      expect(EdgeCache::BustArticle).to have_received(:call)
+    end
+
+    it "does not bust article if it is not the last public reaction" do
+      create(:reaction, reactable: article, user: create(:user))
+      allow(EdgeCache::BustArticle).to receive(:call)
+      reaction.destroy
+      expect(EdgeCache::BustArticle).not_to have_received(:call)
     end
   end
 
@@ -262,6 +297,79 @@ RSpec.describe Reaction, type: :model do
       reaction = create(:vomit_reaction, user: moderator, reactable: user)
 
       expect(described_class.related_negative_reactions_for_user(moderator).first.id).to eq(reaction.id)
+    end
+  end
+
+  describe ".contradictory_mod_reactions" do
+    let(:moderator) { create(:user, :trusted) }
+
+    it "returns the contradictary reactions related to the category passed in" do
+      article = create(:article, user: moderator)
+      reaction = create(:vomit_reaction, user: moderator, reactable: article)
+
+      expect(described_class.contradictory_mod_reactions(
+        category: "thumbsup",
+        reactable_id: article.id,
+        reactable_type: "Article",
+        user: moderator,
+      ).first).to eq(reaction)
+    end
+  end
+
+  describe ".readinglist_for_user finds reactions from given user" do
+    before do
+      user.reactions.create(reactable: article, category: "readinglist")
+      comment = create(:comment)
+      user.reactions.create(reactable: comment, category: "readinglist")
+      article2 = create(:article)
+      user.reactions.create(reactable: article2, category: "like")
+
+      user2 = create(:user)
+      user2.reactions.create(reactable: article, category: "readinglist")
+    end
+
+    it "returns un-archived reactions on articles" do
+      expect(described_class.readinglist_for_user(user).pluck(:reactable_id)).to contain_exactly(article.id)
+    end
+  end
+
+  describe ".live_reactable" do
+    let(:moderator) { create(:user, :trusted) }
+
+    it "returns reactions on articles where article is published" do
+      article = create(:article, published: true)
+      reaction = create(:vomit_reaction, user: moderator, reactable: article)
+
+      expect(described_class.live_reactable.to_a).to eq([reaction])
+    end
+
+    it "does not return reaction on articles where not published" do
+      article = create(:article)
+      create(:vomit_reaction, user: moderator, reactable: article)
+      article.update_column(:published, false)
+
+      expect(described_class.live_reactable.to_a).to eq([])
+    end
+
+    it "returns reactions on comments" do
+      comment = create(:comment)
+      reaction = create(:vomit_reaction, user: moderator, reactable: comment)
+
+      expect(described_class.live_reactable).to eq([reaction])
+    end
+
+    it "returns reactions to users" do
+      user = create(:user)
+      reaction = create(:vomit_reaction, user: moderator, reactable: user)
+
+      expect(described_class.live_reactable.to_a).to eq([reaction])
+    end
+
+    it "does not return reactions to users who are deemed spam already" do
+      user = create(:user, username: "spam_400")
+      create(:vomit_reaction, user: moderator, reactable: user)
+
+      expect(described_class.live_reactable.to_a).to eq([])
     end
   end
 end

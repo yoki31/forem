@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Api::V0::Instances", type: :request do
+RSpec.describe "Api::V0::Instances" do
   describe "GET /api/instance" do
     it "returns the correct attributes", :aggregate_failures do
       create(:user)
@@ -13,7 +13,6 @@ RSpec.describe "Api::V0::Instances", type: :request do
       expect(response.parsed_body["domain"]).to eq Settings::General.app_domain
       expect(response.parsed_body["logo_image_url"]).to eq Settings::General.logo_png
       expect(response.parsed_body["name"]).to eq Settings::Community.community_name
-      expect(response.parsed_body["registered_users_count"]).to eq User.registered.estimated_count
       expect(response.parsed_body["tagline"]).to eq Settings::Community.tagline
       expect(response.parsed_body["version"]).to match(/(stable|beta|edge)\.\d{8}\.\d+/)
       expect(response.parsed_body["visibility"]).to eq "public"

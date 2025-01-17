@@ -3,6 +3,7 @@
 
 /* eslint-env node */
 
+process.env.NODE_ENV = 'test';
 process.env.TZ = 'UTC';
 
 module.exports = {
@@ -13,6 +14,7 @@ module.exports = {
     // This exclusion avoids running coverage on Barrel files, https://twitter.com/housecor/status/981558704708472832
     '!app/javascript/**/index.js',
     '!app/javascript/packs/**/*.js', // avoids running coverage on webpacker pack files
+    'app/javascript/packs/dashboards/*.js', // try opting-in for jest coverage?
     '!**/__tests__/**',
     '!**/__stories__/**',
     '!app/javascript/storybook-static/**/*.js',
@@ -23,17 +25,19 @@ module.exports = {
     // Ignore Storybook configuration files
     '!app/javascript/.storybook/**/*.{js,jsx}',
   ],
+  coverageDirectory: 'coverage/jest',
   coverageThreshold: {
     global: {
-      statements: 41,
-      branches: 38,
-      functions: 40,
-      lines: 42,
+      statements: 43,
+      branches: 45,
+      functions: 42,
+      lines: 44,
     },
   },
   moduleNameMapper: {
     '\\.(svg|png|css)$': '<rootDir>/empty-module.js',
     '^@crayons(.*)$': '<rootDir>/app/javascript/crayons$1',
+    '^@images(.*)$': '<rootDir>/app/assets/images$1',
     '^@utilities(.*)$': '<rootDir>/app/javascript/utilities$1',
     '^@components(.*)$': '<rootDir>/app/javascript/shared/components$1',
     '^react$': 'preact/compat',
@@ -54,4 +58,20 @@ module.exports = {
     'jest-watch-typeahead/testname',
   ],
   testEnvironment: './customJsDomEnvironment.js',
+  // We occasionally need to allow transpiling of specific node_modules. See https://jestjs.io/docs/configuration#transformignorepatterns-arraystring
+  transformIgnorePatterns: [
+    '/node_modules/(?!(preact|react-colorful|i18n-js)/)',
+  ],
+  reporters: [
+    'default',
+    [
+      'jest-junit',
+      {
+        addFileAttribute: 'true',
+        ancestorSeparator: ' › ',
+        classNameTemplate: '{classname}',
+        titleTemplate: '{title}',
+      },
+    ],
+  ],
 };

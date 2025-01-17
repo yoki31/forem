@@ -1,46 +1,56 @@
 class CommentPolicy < ApplicationPolicy
   def edit?
+    return false if user.spam_or_suspended?
+
+    user_author?
+  end
+
+  def destroy?
     user_author?
   end
 
   def create?
-    !user_suspended? && !user.comment_suspended?
+    !user.spam_or_suspended? && !user.comment_suspended?
   end
 
-  def update?
-    edit?
-  end
+  alias new? create?
 
-  def destroy?
-    edit?
-  end
+  alias update? edit?
 
-  def delete_confirm?
-    edit?
-  end
+  alias delete_confirm? destroy?
 
-  def settings?
-    edit?
-  end
+  alias settings? edit?
 
   def preview?
     true
   end
 
+  def subscribe?
+    true
+  end
+
+  def unsubscribe?
+    true
+  end
+
+  def moderate?
+    return true if user.trusted?
+
+    moderator_create?
+  end
+
   def moderator_create?
-    user_moderator? || minimal_admin?
+    Authorizer.for(user: user).accesses_mod_response_templates?
   end
 
   def hide?
-    user_commentable_author?
+    user_commentable_author? && !record.by_staff_account?
   end
 
-  def unhide?
-    user_commentable_author?
-  end
+  alias unhide? hide?
 
   def admin_delete?
-    minimal_admin?
+    user_any_admin?
   end
 
   def permitted_attributes_for_update
@@ -49,6 +59,14 @@ class CommentPolicy < ApplicationPolicy
 
   def permitted_attributes_for_preview
     %i[body_markdown]
+  end
+
+  def permitted_attributes_for_subscribe
+    %i[subscription_id comment_id article_id]
+  end
+
+  def permitted_attributes_for_unsubscribe
+    %i[subscription_id]
   end
 
   def permitted_attributes_for_create

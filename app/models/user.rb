@@ -1,14 +1,16 @@
 class User < ApplicationRecord
   resourcify
-  rolify
+  rolify after_add: :update_user_roles_cache, after_remove: :update_user_roles_cache
 
   include CloudinaryHelper
-  include Storext.model
+
+  include Images::Profile.for(:profile_image_url)
+  include AlgoliaSearchable
 
   # NOTE: we are using an inline module to keep profile related things together.
   concerning :Profiles do
     included do
-      has_one :profile, dependent: :destroy
+      has_one :profile, dependent: :delete
 
       # NOTE: There are rare cases were we want to skip this callback, primarily
       # in tests. `skip_callback` modifies global state, which is not thread-safe
@@ -17,48 +19,40 @@ class User < ApplicationRecord
       attr_accessor :_skip_creating_profile
 
       # All new users should automatically have a profile
-      after_create_commit -> { Profile.create(user: self) }, unless: :_skip_creating_profile
+      after_create_commit unless: :_skip_creating_profile do
+        Profile.find_or_create_by(user: self)
+      rescue ActiveRecord::RecordNotUnique
+        Rails.logger.warn("Profile already exists for user #{id}")
+      end
     end
   end
 
-  ANY_ADMIN_ROLES = %i[admin super_admin].freeze
+  include StringAttributeCleaner.nullify_blanks_for(:email)
+
+  extend UniqueAcrossModels
   USERNAME_MAX_LENGTH = 30
-  USERNAME_REGEXP = /\A[a-zA-Z0-9_]+\z/
-  MESSAGES = {
-    reserved_username: "username is reserved"
-  }.freeze
-  # follow the syntax in https://interledger.org/rfcs/0026-payment-pointers/#payment-pointer-syntax
-  PAYMENT_POINTER_REGEXP = %r{
-    \A                # start
-    \$                # starts with a dollar sign
-    ([a-zA-Z0-9\-.])+ # matches the hostname (ex ilp.uphold.com)
-    (/[\x20-\x7F]+)?  # optional forward slash and identifier with printable ASCII characters
-    \z
-  }x
+
+  RECENTLY_ACTIVE_LIMIT = 10_000
 
   attr_accessor :scholar_email, :new_note, :note_for_current_role, :user_status, :merge_user_id,
                 :add_credits, :remove_credits, :add_org_credits, :remove_org_credits, :ip_address,
-                :current_password
+                :current_password, :custom_invite_subject, :custom_invite_message, :custom_invite_footnote
 
   acts_as_followable
   acts_as_follower
 
-  has_one :notification_setting, class_name: "Users::NotificationSetting", dependent: :destroy
-  has_one :setting, class_name: "Users::Setting", dependent: :destroy
+  has_one :notification_setting, class_name: "Users::NotificationSetting", dependent: :delete
+  has_one :setting, class_name: "Users::Setting", dependent: :delete
 
-  has_many :access_grants, class_name: "Doorkeeper::AccessGrant", foreign_key: :resource_owner_id,
-                           inverse_of: :resource_owner, dependent: :delete_all
-  has_many :access_tokens, class_name: "Doorkeeper::AccessToken", foreign_key: :resource_owner_id,
-                           inverse_of: :resource_owner, dependent: :delete_all
   has_many :affected_feedback_messages, class_name: "FeedbackMessage",
                                         inverse_of: :affected, foreign_key: :affected_id, dependent: :nullify
-  has_many :ahoy_events, class_name: "Ahoy::Event", dependent: :destroy
-  has_many :ahoy_visits, class_name: "Ahoy::Visit", dependent: :destroy
-  has_many :api_secrets, dependent: :destroy
+  has_many :ahoy_events, class_name: "Ahoy::Event", dependent: :delete_all
+  has_many :ahoy_visits, class_name: "Ahoy::Visit", dependent: :delete_all
+  has_many :api_secrets, dependent: :delete_all
   has_many :articles, dependent: :destroy
   has_many :audit_logs, dependent: :nullify
   has_many :authored_notes, inverse_of: :author, class_name: "Note", foreign_key: :author_id, dependent: :delete_all
-  has_many :badge_achievements, dependent: :destroy
+  has_many :badge_achievements, dependent: :delete_all
   has_many :badge_achievements_rewarded, class_name: "BadgeAchievement", foreign_key: :rewarder_id,
                                          inverse_of: :rewarder, dependent: :nullify
   has_many :badges, through: :badge_achievements
@@ -72,33 +66,38 @@ class User < ApplicationRecord
   has_many :comments, dependent: :destroy
   has_many :created_podcasts, class_name: "Podcast", foreign_key: :creator_id, inverse_of: :creator, dependent: :nullify
   has_many :credits, dependent: :destroy
-  has_many :discussion_locks, dependent: :destroy, inverse_of: :locking_user, foreign_key: :locking_user_id
-  has_many :display_ad_events, dependent: :destroy
+  has_many :discussion_locks, dependent: :delete_all, inverse_of: :locking_user, foreign_key: :locking_user_id
+  has_many :billboard_events, dependent: :nullify
   has_many :email_authorizations, dependent: :delete_all
   has_many :email_messages, class_name: "Ahoy::Message", dependent: :destroy
+  has_many :feed_events, dependent: :nullify
   has_many :field_test_memberships, class_name: "FieldTest::Membership", as: :participant, dependent: :destroy
+  # Consider that we might be able to use dependent: :delete_all as the GithubRepo busts the user cache
   has_many :github_repos, dependent: :destroy
   has_many :html_variants, dependent: :destroy
-  has_many :identities, dependent: :destroy
+  has_many :identities, dependent: :delete_all
   has_many :identities_enabled, -> { enabled }, class_name: "Identity", inverse_of: false
   has_many :listings, dependent: :destroy
-  has_many :mentions, dependent: :destroy
-  has_many :notes, as: :noteable, inverse_of: :noteable, dependent: :destroy
-  has_many :notification_subscriptions, dependent: :destroy
-  has_many :notifications, dependent: :destroy
+  has_many :mentions, dependent: :delete_all
+  has_many :notes, as: :noteable, inverse_of: :noteable, dependent: :delete_all
+  has_many :notification_subscriptions, dependent: :delete_all
+  has_many :notifications, dependent: :delete_all
   has_many :offender_feedback_messages, class_name: "FeedbackMessage",
                                         inverse_of: :offender, foreign_key: :offender_id, dependent: :nullify
-  has_many :organization_memberships, dependent: :destroy
+  has_many :organization_memberships, dependent: :delete_all
   has_many :organizations, through: :organization_memberships
   # we keep page views as they belong to the article, not to the user who viewed it
   has_many :page_views, dependent: :nullify
-  has_many :podcast_episode_appearances, dependent: :destroy, inverse_of: :user
+  has_many :podcast_episode_appearances, dependent: :delete_all, inverse_of: :user
   has_many :podcast_episodes, through: :podcast_episode_appearances, source: :podcast_episode
-  has_many :podcast_ownerships, dependent: :destroy, inverse_of: :owner
+  has_many :podcast_ownerships, dependent: :delete_all, inverse_of: :owner
   has_many :podcasts_owned, through: :podcast_ownerships, source: :podcast
-  has_many :poll_skips, dependent: :destroy
-  has_many :poll_votes, dependent: :destroy
+  has_many :poll_skips, dependent: :delete_all
+  has_many :poll_votes, dependent: :delete_all
   has_many :profile_pins, as: :profile, inverse_of: :profile, dependent: :delete_all
+  has_many :segmented_users, dependent: :destroy
+  has_many :audience_segments, through: :segmented_users
+  has_many :recommended_articles_lists, dependent: :destroy
 
   # we keep rating votes as they belong to the article, not to the user who viewed it
   has_many :rating_votes, dependent: :nullify
@@ -106,21 +105,22 @@ class User < ApplicationRecord
   has_many :reactions, dependent: :destroy
   has_many :reporter_feedback_messages, class_name: "FeedbackMessage",
                                         inverse_of: :reporter, foreign_key: :reporter_id, dependent: :nullify
-  has_many :response_templates, inverse_of: :user, dependent: :destroy
+  has_many :response_templates, inverse_of: :user, dependent: :delete_all
   has_many :source_authored_user_subscriptions, class_name: "UserSubscription",
                                                 foreign_key: :author_id, inverse_of: :author, dependent: :destroy
   has_many :subscribed_to_user_subscriptions, class_name: "UserSubscription",
                                               foreign_key: :subscriber_id, inverse_of: :subscriber, dependent: :destroy
   has_many :subscribers, through: :source_authored_user_subscriptions, dependent: :destroy
   has_many :tweets, dependent: :nullify
-  has_many :webhook_endpoints, class_name: "Webhook::Endpoint", inverse_of: :user, dependent: :delete_all
   has_many :devices, dependent: :delete_all
-  has_many :sponsorships, dependent: :destroy
+  # languages that user undestands
+  has_many :languages, class_name: "UserLanguage", inverse_of: :user, dependent: :delete_all
+  has_many :user_visit_contexts, dependent: :delete_all
 
   mount_uploader :profile_image, ProfileImageUploader
 
   devise :invitable, :omniauthable, :registerable, :database_authenticatable, :confirmable, :rememberable,
-         :recoverable, :lockable
+         :recoverable, :lockable, :trackable
 
   validates :articles_count, presence: true
   validates :badge_achievements_count, presence: true
@@ -133,20 +133,17 @@ class User < ApplicationRecord
   validates :following_orgs_count, presence: true
   validates :following_tags_count, presence: true
   validates :following_users_count, presence: true
-  validates :name, length: { in: 1..100 }
+  validates :name, length: { in: 1..100 }, presence: true
   validates :password, length: { in: 8..100 }, allow_nil: true
-  validates :payment_pointer, format: PAYMENT_POINTER_REGEXP, allow_blank: true
   validates :rating_votes_count, presence: true
   validates :reactions_count, presence: true
   validates :sign_in_count, presence: true
   validates :spent_credits_count, presence: true
   validates :subscribed_to_user_subscriptions_count, presence: true
   validates :unspent_credits_count, presence: true
-  validates :username, length: { in: 2..USERNAME_MAX_LENGTH }, format: USERNAME_REGEXP
-  validates :username, presence: true, exclusion: { in: ReservedWords.all, message: MESSAGES[:invalid_username] }
-  validates :username, uniqueness: { case_sensitive: false, message: lambda do |_obj, data|
-    "#{data[:value]} is taken."
-  end }, if: :username_changed?
+  validates :max_score, numericality: { greater_than_or_equal_to: 0 }
+  validates :reputation_modifier, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 5 },
+                                  presence: true
 
   # add validators for provider related usernames
   Authentication::Providers.username_fields.each do |username_field|
@@ -161,7 +158,9 @@ class User < ApplicationRecord
   end
 
   validate :non_banished_username, :username_changed?
-  validate :unique_including_orgs_and_podcasts, if: :username_changed?
+
+  unique_across_models :username, length: { in: 2..USERNAME_MAX_LENGTH }
+
   validate :can_send_confirmation_email
   validate :update_rate_limit
   # NOTE: when updating the password on a Devise enabled model, the :encrypted_password
@@ -172,6 +171,7 @@ class User < ApplicationRecord
 
   scope :eager_load_serialized_data, -> { includes(:roles) }
   scope :registered, -> { where(registered: true) }
+  scope :invited, -> { where(registered: false) }
   # Unfortunately pg_search's default SQL query is not performant enough in this
   # particular case (~ 500ms). There are multiple reasons:
   # => creates a complex query like `SELECT FROM users INNER JOIN users` to compute ranking.
@@ -187,6 +187,9 @@ class User < ApplicationRecord
   # => https://stackoverflow.com/a/11007216/4186181
   #
   scope :search_by_name_and_username, lambda { |term|
+    term = term&.delete("\\") # prevents syntax error in tsquery
+    return none if term.blank?
+
     where(
       sanitize_sql_array(
         [
@@ -205,21 +208,56 @@ class User < ApplicationRecord
       ),
     )
   }
-  before_validation :check_for_username_change
+
+  scope :with_experience_level, lambda { |level = nil|
+    includes(:setting).where("users_settings.experience_level": level)
+  }
+
+  scope :recently_active, lambda { |active_limit = RECENTLY_ACTIVE_LIMIT|
+    order(updated_at: :desc).limit(active_limit)
+  }
+
+  scope :following_tags, lambda { |tags|
+    tags = tags.gsub(" ", "").split(",") if tags.is_a?(String)
+    joins("INNER JOIN follows ON follows.follower_id = users.id AND follows.follower_type = 'User'")
+      .joins("INNER JOIN tags ON tags.id = follows.followable_id AND follows.followable_type = 'ActsAsTaggableOn::Tag'")
+      .where(tags: { name: tags })
+      .distinct
+  }
+  scope :above_average, lambda {
+    where(
+      articles_count: average_articles_count..,
+      comments_count: average_comments_count..,
+    )
+  }
+
   before_validation :downcase_email
+
   # make sure usernames are not empty, to be able to use the database unique index
-  before_validation :verify_email
   before_validation :set_username
-  before_validation :strip_payment_pointer
   before_create :create_users_settings_and_notification_settings_records
-  before_destroy :unsubscribe_from_newsletters, prepend: true
+  after_update :refresh_auto_audience_segments
+  before_destroy :remove_from_mailchimp_newsletters, prepend: true
   before_destroy :destroy_follows, prepend: true
 
   after_create_commit :send_welcome_notification
 
   after_save :create_conditional_autovomits
+  after_save :generate_social_images
   after_commit :subscribe_to_mailchimp_newsletter
   after_commit :bust_cache
+
+  def self.average_articles_count
+    Rails.cache.fetch("established_user_article_count", expires_in: 1.day) do
+      unscoped { where(articles_count: 1..).average(:articles_count) || average(:articles_count) } || 0.0
+    end
+  end
+
+  def self.average_comments_count
+    Rails.cache.fetch("established_user_comment_count", expires_in: 1.day) do
+      unscoped { where(comments_count: 1..).average(:comments_count) || average(:comments_count) } || 0.0
+    end
+  end
 
   def self.staff_account
     find_by(id: Settings::Community.staff_user_id)
@@ -227,6 +265,10 @@ class User < ApplicationRecord
 
   def self.mascot_account
     find_by(id: Settings::General.mascot_user_id)
+  end
+
+  def good_standing_followers_count
+    Follow.non_suspended("User", id).count
   end
 
   def tag_line
@@ -246,6 +288,21 @@ class User < ApplicationRecord
     self.remember_created_at ||= Time.now.utc
   end
 
+  def set_initial_roles!
+    # Avoid overwriting roles for users who already exist but are e.g. logging in
+    # through a new identity provider
+    return unless valid? && previously_new_record?
+
+    if Settings::General.waiting_on_first_user
+      add_role(:creator)
+      add_role(:super_admin)
+      add_role(:trusted)
+    elsif Settings::Authentication.limit_new_users?
+      add_role(:limited)
+      # Otherwise just leave the new user in good standing
+    end
+  end
+
   def calculate_score
     # User score is used to mitigate spam by reducing visibility of flagged users
     # It can generally be used as a baseline for affecting certain functionality which
@@ -259,7 +316,9 @@ class User < ApplicationRecord
     # mass re-calculation is needed.
     user_reaction_points = Reaction.user_vomits.where(reactable_id: id).sum(:points)
     calculated_score = (badge_achievements_count * 10) + user_reaction_points
+    calculated_score -= 500 if spam?
     update_column(:score, calculated_score)
+    AlgoliaSearch::SearchIndexWorker.perform_async(self.class.name, id, false)
   end
 
   def path
@@ -281,6 +340,20 @@ class User < ApplicationRecord
       .union(Article.where(user_id: cached_following_users_ids))
   end
 
+  def cached_followed_tag_names_or_recent_tags
+    followed_tags = cached_followed_tag_names
+    return followed_tags if followed_tags.any?
+
+    ### pluck cached_tag_list for articles with most recent page views. Page views have a user_id and article_id
+    ### cached_tag_list is a comma-separated string of tag names on the article
+
+    cached_recent_pageview_article_ids = page_views.order("created_at DESC").limit(6).pluck(:article_id)
+    tags = Article.where(id: cached_recent_pageview_article_ids).pluck(:cached_tag_list)
+      .map { |list| list.to_s.split(", ") }
+      .flatten.uniq.reject(&:empty?)
+    tags + %w[career productivity ai git] # These are highly DEV-specific. Should be refactored later to be config'd
+  end
+
   def cached_following_users_ids
     cache_key = "user-#{id}-#{last_followed_at}-#{following_users_count}/following_users_ids"
     Rails.cache.fetch(cache_key, expires_in: 12.hours) do
@@ -296,7 +369,7 @@ class User < ApplicationRecord
   end
 
   def cached_following_podcasts_ids
-    cache_key = "user-#{id}-#{last_followed_at}/following_podcasts_ids"
+    cache_key = "#{cache_key_with_version}/following_podcasts_ids"
     Rails.cache.fetch(cache_key, expires_in: 12.hours) do
       Follow.follower_podcast(id).pluck(:followable_id)
     end
@@ -304,10 +377,21 @@ class User < ApplicationRecord
 
   def cached_reading_list_article_ids
     Rails.cache.fetch("reading_list_ids_of_articles_#{id}_#{public_reactions_count}_#{last_reacted_at}") do
-      Reaction.readinglist.where(
-        user_id: id, reactable_type: "Article",
-      ).where.not(status: "archived").order(created_at: :desc).pluck(:reactable_id)
+      readinglist = Reaction.readinglist_for_user(self).order("created_at DESC")
+      published = Article.published.from_subforem.where(id: readinglist.pluck(:reactable_id)).ids
+      readinglist.filter_map { |r| r.reactable_id if published.include? r.reactable_id }
     end
+  end
+
+  def cached_role_names
+    cache_key = "user-#{id}/role_names"
+    Rails.cache.fetch(cache_key, expires_in: 200.hours) do
+      roles.pluck(:name)
+    end
+  end
+
+  def cached_base_subscriber?
+    cached_role_names.include?("base_subscriber")
   end
 
   def processed_website_url
@@ -319,98 +403,147 @@ class User < ApplicationRecord
   end
 
   def cached_followed_tag_names
-    cache_name = "user-#{id}-#{following_tags_count}-#{last_followed_at&.rfc3339}/followed_tag_names"
+    cache_name = "user-#{id}-#{following_tags_count}-#{last_followed_at&.rfc3339}-x/followed_tag_names"
     Rails.cache.fetch(cache_name, expires_in: 24.hours) do
-      Tag.where(
-        id: Follow.where(
-          follower_id: id,
-          followable_type: "ActsAsTaggableOn::Tag",
-          points: 1..,
-        ).select(:followable_id),
-      ).pluck(:name)
+      Tag.followed_by(self).pluck(:name)
     end
   end
 
   def cached_antifollowed_tag_names
     cache_name = "user-#{id}-#{following_tags_count}-#{last_followed_at&.rfc3339}/antifollowed_tag_names"
     Rails.cache.fetch(cache_name, expires_in: 24.hours) do
-      Tag.where(
-        id: Follow.where(
-          follower_id: id,
-          followable_type: "ActsAsTaggableOn::Tag",
-          points: ...1,
-        ).select(:followable_id),
-      ).pluck(:name)
+      Tag.antifollowed_by(self).pluck(:name)
     end
   end
 
-  def suspended?
-    has_role?(:suspended)
+  def refresh_auto_audience_segments
+    SegmentedUserRefreshWorker.perform_async(id)
   end
 
-  def warned
-    has_role?(:warned)
+  ##############################################################################
+  #
+  # Heads Up: Start Authorization Refactor
+  #
+  ##############################################################################
+  #
+  # What's going on here?  First, I'm wanting to encourage folks to
+  # not call these methods directly.  Instead I want to get all of
+  # these method calls in a single location so we can begin to analyze
+  # the behavior.
+
+  # @api private
+  #
+  # The method originally comes from the Rollify gem.  Please don't
+  # call it from controllers or views.  Favor `user.tech_admin?` over
+  # `user.has_role?(:tech_admin)`.
+  #
+  # @see Authorizer for further discussion.
+  private :has_role?
+
+  ##
+  # @api private
+  #
+  # The method originally comes from the Rollify gem.  Please don't
+  # call it from controllers or views.  Favor `user.admin?` over
+  # `user.has_any_role?(:admin)`.
+  #
+  # @see Authorizer for further discussion.
+  private :has_any_role?
+
+  ##
+  # @api private
+  #
+  # This is a refactoring step to help move the role questions out of the user object.
+  #
+  # @see https://github.com/forem/forem/issues/15624 for more discussion.
+  def authorizer
+    @authorizer ||= Authorizer.for(user: self)
   end
 
-  def admin?
-    has_role?(:super_admin)
-  end
+  # My preference is to go with:
+  #
+  #   `Authorize.for(user: user, to: <action>, on: <subject>)`
+  #
+  # However, this is a refactor, and its goal is to reduce the direct
+  # calls to user.<role question>.
+  delegate(
+    :admin?,
+    :administrative_access_to?,
+    :any_admin?,
+    :auditable?,
+    :banished?,
+    :comment_suspended?,
+    :limited?,
+    :creator?,
+    :has_trusted_role?,
+    :super_moderator?,
+    :podcast_admin_for?,
+    :restricted_liquid_tag_for?,
+    :single_resource_admin_for?,
+    :super_admin?,
+    :support_admin?,
+    :suspended?,
+    :spam?,
+    :spam_or_suspended?,
+    :tag_moderator?,
+    :tech_admin?,
+    :trusted?,
+    :user_subscription_tag_available?,
+    :vomited_on?,
+    :warned?,
+    :base_subscriber?,
+    to: :authorizer,
+  )
+  alias suspended suspended?
+  alias spam spam?
+  ##############################################################################
+  #
+  # End Authorization Refactor
+  #
+  ##############################################################################
 
-  def creator?
-    has_role?(:creator)
-  end
-
-  def any_admin?
-    @any_admin ||= roles.where(name: ANY_ADMIN_ROLES).any?
-  end
-
-  def tech_admin?
-    has_role?(:tech_admin) || has_role?(:super_admin)
-  end
-
-  def vomitted_on?
-    Reaction.exists?(reactable_id: id, reactable_type: "User", category: "vomit", status: "confirmed")
-  end
-
-  def trusted
-    return @trusted if defined? @trusted
-
-    @trusted = Rails.cache.fetch("user-#{id}/has_trusted_role", expires_in: 200.hours) do
-      has_role?(:trusted)
-    end
-  end
-
+  # The name of the tags moderated by the user.
+  #
+  # @note This caches a relatively expensive query
+  #
+  # @return [Array<String>] an array of tag names
+  #
+  # @see #moderator_for_tags_not_cached
   def moderator_for_tags
     Rails.cache.fetch("user-#{id}/tag_moderators_list", expires_in: 200.hours) do
-      tag_ids = roles.where(name: "tag_moderator").pluck(:resource_id)
-      Tag.where(id: tag_ids).pluck(:name)
+      moderator_for_tags_not_cached
     end
   end
 
-  def comment_suspended?
-    has_role?(:comment_suspended)
-  end
-
-  def workshop_eligible?
-    has_any_role?(:workshop_pass)
+  # When you need the "up to the moment" names of the tags moderated
+  # by this user.
+  #
+  # @note Favor #moderator_for_tags
+  #
+  # @return [Array<String>] an array of tag names
+  #
+  # @see #moderator_for_tags
+  def moderator_for_tags_not_cached
+    tag_ids = roles.where(name: "tag_moderator").pluck(:resource_id)
+    Tag.where(id: tag_ids).pluck(:name)
   end
 
   def admin_organizations
-    org_ids = organization_memberships.where(type_of_user: "admin").pluck(:organization_id)
+    org_ids = organization_memberships.admin.pluck(:organization_id)
     organizations.where(id: org_ids)
   end
 
   def member_organizations
-    org_ids = organization_memberships.where(type_of_user: %w[admin member]).pluck(:organization_id)
+    org_ids = organization_memberships.member.pluck(:organization_id)
     organizations.where(id: org_ids)
   end
 
   def org_member?(organization)
-    OrganizationMembership.exists?(user: self, organization: organization, type_of_user: %w[admin member])
+    organization_memberships.member.exists?(organization: organization)
   end
 
   def org_admin?(organization)
-    OrganizationMembership.exists?(user: self, organization: organization, type_of_user: "admin")
+    organization_memberships.admin.exists?(organization: organization)
   end
 
   def block; end
@@ -427,22 +560,8 @@ class User < ApplicationRecord
     UserBlock.blocking?(blocker_id, id)
   end
 
-  def unique_including_orgs_and_podcasts
-    username_taken = (
-      Organization.exists?(slug: username) ||
-      Podcast.exists?(slug: username) ||
-      Page.exists?(slug: username)
-    )
-
-    errors.add(:username, "is taken.") if username_taken
-  end
-
   def non_banished_username
-    errors.add(:username, "has been banished.") if BanishedUser.exists?(username: username)
-  end
-
-  def banished?
-    username.starts_with?("spam_")
+    errors.add(:username, I18n.t("models.user.has_been_banished")) if BanishedUser.exists?(username: username)
   end
 
   def subscribe_to_mailchimp_newsletter
@@ -454,38 +573,15 @@ class User < ApplicationRecord
     Users::SubscribeToMailchimpNewsletterWorker.perform_async(id)
   end
 
-  def a_sustaining_member?
-    monthly_dues.positive?
-  end
-
-  def resave_articles
-    articles.find_each do |article|
-      if article.path
-        cache_bust = EdgeCache::Bust.new
-        cache_bust.call(article.path)
-        cache_bust.call("#{article.path}?i=i")
-      end
-      article.save
-    end
-  end
-
   def profile_image_90
-    Images::Profile.call(profile_image_url, length: 90)
+    profile_image_url_for(length: 90)
   end
 
-  def unsubscribe_from_newsletters
+  def remove_from_mailchimp_newsletters
     return if email.blank?
     return if Settings::General.mailchimp_api_key.blank?
 
-    Mailchimp::Bot.new(self).unsubscribe_all_newsletters
-  end
-
-  def auditable?
-    trusted || tag_moderator? || any_admin?
-  end
-
-  def tag_moderator?
-    roles.where(name: "tag_moderator").any?
+    Mailchimp::Bot.new(self).remove_from_mailchimp
   end
 
   def enough_credits?(num_credits_needed)
@@ -493,11 +589,7 @@ class User < ApplicationRecord
   end
 
   def receives_follower_email_notifications?
-    email.present? && subscribed_to_email_follower_notifications?
-  end
-
-  def hotness_score
-    search_score
+    email.present? && notification_setting.subscribed_to_email_follower_notifications?
   end
 
   def authenticated_through?(provider_name)
@@ -522,16 +614,35 @@ class User < ApplicationRecord
     "User:#{id}"
   end
 
-  def subscribed_to_welcome_notifications?
-    notification_setting.welcome_notifications
+  def reactions_to
+    Reaction.for_user(self)
   end
 
-  def subscribed_to_mod_roundrobin_notifications?
-    notification_setting.mod_roundrobin_notifications
+  def last_activity
+    return unless registered == true
+
+    [registered_at, last_comment_at, last_article_at, latest_article_updated_at, last_reacted_at, profile_updated_at,
+     last_moderation_notification, last_notification_activity].compact.max
   end
 
-  def subscribed_to_email_follower_notifications?
-    notification_setting.email_follower_notifications
+  def currently_following_tags
+    Tag.followed_by(self)
+  end
+
+  def has_no_published_content?
+    articles.published.from_subforem.empty? && comments_count.zero?
+  end
+
+  def send_magic_link!
+    # Generate random string
+    self.sign_in_token = SecureRandom.hex(20)
+    self.sign_in_token_sent_at = Time.now.utc
+    if self.save
+      VerificationMailer.with(user_id: id).magic_link.deliver_now
+    else
+      errors.add(:email, "Error sending magic link")
+      Rails.logger.error("Error sending magic link for user #{id}")
+    end
   end
 
   protected
@@ -545,6 +656,13 @@ class User < ApplicationRecord
 
   private
 
+  def generate_social_images
+    change = saved_change_to_attribute?(:name) || saved_change_to_attribute?(:profile_image)
+    return unless change && articles.published.from_subforem.size.positive?
+
+    Images::SocialImageWorker.perform_async(id, self.class.name)
+  end
+
   def create_users_settings_and_notification_settings_records
     self.setting = Users::Setting.create
     self.notification_setting = Users::NotificationSetting.create
@@ -556,49 +674,24 @@ class User < ApplicationRecord
     Notification.send_welcome_notification(id, set_up_profile_broadcast.id)
   end
 
-  def verify_email
-    self.email = nil if email == ""
-  end
-
   def set_username
-    set_temp_username if username.blank?
-    self.username = username&.downcase
+    self.username = username&.downcase.presence || generate_username
   end
 
-  def set_temp_username
-    self.username = if temp_name_exists?
-                      "#{temp_username}_#{rand(100)}"
-                    else
-                      temp_username
-                    end
+  def auth_provider_usernames
+    attributes
+      .with_indifferent_access
+      .slice(*Authentication::Providers.username_fields)
+      .values.compact || []
   end
 
-  def temp_name_exists?
-    User.exists?(username: temp_username) || Organization.exists?(slug: temp_username)
-  end
-
-  def temp_username
-    Authentication::Providers.username_fields.each do |username_field|
-      value = public_send(username_field)
-      next if value.blank?
-
-      return value.downcase.gsub(/[^0-9a-z_]/i, "").delete(" ")
-    end
+  def generate_username
+    Users::UsernameGenerator
+      .call(auth_provider_usernames)
   end
 
   def downcase_email
     self.email = email.downcase if email
-  end
-
-  def check_for_username_change
-    return unless username_changed?
-
-    self.old_old_username = old_username
-    self.old_username = username_was
-    articles.find_each do |article|
-      article.path = article.path.gsub(username_was, username)
-      article.save
-    end
   end
 
   def bust_cache
@@ -606,31 +699,7 @@ class User < ApplicationRecord
   end
 
   def create_conditional_autovomits
-    return unless Settings::RateLimit.spam_trigger_terms.any? do |term|
-      name.match?(/#{term}/i)
-    end
-
-    Reaction.create!(
-      user_id: Settings::General.mascot_user_id,
-      reactable_id: id,
-      reactable_type: "User",
-      category: "vomit",
-    )
-  end
-
-  # TODO: @citizen428 I don't want to completely remove this method yet, as we
-  # have similar methods in other models. But the previous implementation used
-  # three profile fields that we can't guarantee to exist across all Forems. So
-  # for now this method will just return an empty string.
-  def tag_keywords_for_search
-    ""
-  end
-
-  # TODO: this can be removed once we migrate away from ES
-  def search_score
-    counts_score = (articles_count + comments_count + reactions_count + badge_achievements_count) * 10
-    score = (counts_score + tag_keywords_for_search.size) * reputation_modifier
-    score.to_i
+    Spam::Handler.handle_user!(user: self)
   end
 
   def destroy_follows
@@ -645,7 +714,7 @@ class User < ApplicationRecord
     rate_limiter.track_limit_by_action(:send_email_confirmation)
     rate_limiter.check_limit!(:send_email_confirmation)
   rescue RateLimitChecker::LimitReached => e
-    errors.add(:email, "confirmation could not be sent. #{e.message}")
+    errors.add(:email, I18n.t("models.user.could_not_send", e_message: e.message))
   end
 
   def update_rate_limit
@@ -654,20 +723,24 @@ class User < ApplicationRecord
     rate_limiter.track_limit_by_action(:user_update)
     rate_limiter.check_limit!(:user_update)
   rescue RateLimitChecker::LimitReached => e
-    errors.add(:base, "User could not be saved. #{e.message}")
+    errors.add(:base, I18n.t("models.user.user_could_not_be_saved", e_message: e.message))
   end
 
   def password_matches_confirmation
     return true if password == password_confirmation
 
-    errors.add(:password, "doesn't match password confirmation")
-  end
-
-  def strip_payment_pointer
-    self.payment_pointer = payment_pointer.strip if payment_pointer
+    errors.add(:password, I18n.t("models.user.password_not_matched"))
   end
 
   def confirmation_required?
     ForemInstance.smtp_enabled?
+  end
+
+  def update_user_roles_cache(...)
+    authorizer.clear_cache
+    Rails.cache.delete("user-#{id}/has_trusted_role")
+    Rails.cache.delete("user-#{id}/role_names")
+    refresh_auto_audience_segments
+    trusted?
   end
 end

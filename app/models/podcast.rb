@@ -1,6 +1,8 @@
 class Podcast < ApplicationRecord
   resourcify
 
+  include Images::Profile.for(:profile_image_url)
+
   belongs_to :creator, class_name: "User", inverse_of: :created_podcasts, optional: true
 
   has_many :podcast_episodes, dependent: :destroy
@@ -15,12 +17,9 @@ class Podcast < ApplicationRecord
   validates :main_color_hex, :title, :feed_url, :image, presence: true
   validates :main_color_hex, format: /\A([a-fA-F]|[0-9]){6}\Z/
   validates :feed_url, uniqueness: true, url: { schemes: %w[https http] }
-  validates :slug,
-            presence: true,
-            uniqueness: true,
-            format: { with: /\A[a-zA-Z0-9\-_]+\Z/ },
-            exclusion: { in: ReservedWords.all, message: "slug is reserved" }
-  validate :unique_slug_including_users_and_orgs, if: :slug_changed?
+
+  extend UniqueAcrossModels
+  unique_across_models :slug
 
   after_save :bust_cache
 
@@ -49,15 +48,10 @@ class Podcast < ApplicationRecord
   end
 
   def image_90
-    Images::Profile.call(profile_image_url, length: 90)
+    profile_image_url_for(length: 90)
   end
 
   private
-
-  def unique_slug_including_users_and_orgs
-    slug_exists = User.exists?(username: slug) || Organization.exists?(slug: slug) || Page.exists?(slug: slug)
-    errors.add(:slug, "is taken.") if slug_exists
-  end
 
   def bust_cache
     return unless path

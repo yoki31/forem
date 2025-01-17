@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "LiquidEmbeds", type: :request, vcr: { cassette_name: "twitter_client_status_extended" } do
+RSpec.describe "LiquidEmbeds", vcr: { cassette_name: "twitter_client_status_extended" } do
   describe "get /embeds" do
     let(:path) { liquid_embed_path("tweet", args: 1_018_911_886_862_057_472) }
 
@@ -17,7 +17,7 @@ RSpec.describe "LiquidEmbeds", type: :request, vcr: { cassette_name: "twitter_cl
     it "renders 404 if improper tweet" do
       expect do
         get liquid_embed_path("tweet", args: "improper")
-      end.to raise_error(ActionView::Template::Error)
+      end.to raise_error(ActionController::RoutingError)
     end
 
     it "contains base target parent" do

@@ -19,6 +19,9 @@ en:
         meta:
           title: Purchase Credits
         heading: Purchase credits for @%{name}
+        hook:
+          text_html: Credits are used for %{listings} as well as upcoming products and services.
+          listings: "%{community} listings"
         form:
           amount:
             label: Amount to Purchase
@@ -48,6 +51,8 @@ en:
       tag: 'Tag: %{name}'
       status:
         user:
-          other: You have %{count} personal credits to spend
+          one: "You have %{count} personal credit to spend"
+          other: "You have %{count} personal credits to spend"
         org_html:
+          one: "%{name} has %{num} credit to spend"
           other: "%{name} has %{num} credits to spend"

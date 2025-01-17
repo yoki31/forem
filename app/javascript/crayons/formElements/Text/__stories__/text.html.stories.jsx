@@ -2,7 +2,7 @@ import { h } from 'preact';
 
 import '../../../storybook-utilities/designSystem.scss';
 
-export default { title: 'Components/Form Components/Text Field/HTML' };
+export default { title: 'Components/Form Elements/Text Field' };
 
 export const Default = () => (
   <input
@@ -12,7 +12,7 @@ export const Default = () => (
   />
 );
 
-Default.story = { name: 'default' };
+Default.storyName = 'default';
 
 export const Disabled = () => (
   <input
@@ -24,7 +24,7 @@ export const Disabled = () => (
   />
 );
 
-Disabled.story = { name: 'disabled' };
+Disabled.storyName = 'disabled';
 
 export const WithLabelAndDescriptions = () => (
   <div className="crayons-field">
@@ -46,6 +46,4 @@ export const WithLabelAndDescriptions = () => (
   </div>
 );
 
-WithLabelAndDescriptions.story = {
-  name: 'with <label /> and descriptions',
-};
+WithLabelAndDescriptions.storyName = 'with <label /> and descriptions';

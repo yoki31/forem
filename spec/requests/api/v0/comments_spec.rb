@@ -1,6 +1,6 @@
 require "rails_helper"
 
-RSpec.describe "Api::V0::Comments", type: :request do
+RSpec.describe "Api::V0::Comments" do
   let(:article) { create(:article) }
   let!(:root_comment) { create(:comment, commentable: article) }
   let!(:child_comment) do
@@ -53,7 +53,7 @@ RSpec.describe "Api::V0::Comments", type: :request do
       get api_comments_path(a_id: article.id)
 
       expected_ids = article.comments.roots.map(&:id_code_generated)
-      response_ids = response.parsed_body.map { |cm| cm["id_code"] }
+      response_ids = response.parsed_body.pluck("id_code")
       expect(response_ids).to match_array(expected_ids)
     end
 
@@ -118,7 +118,7 @@ RSpec.describe "Api::V0::Comments", type: :request do
       it "replaces the body_html" do
         get api_comments_path(a_id: article.id)
 
-        expect(find_child_comment(response)["body_html"]).to eq("<p>#{Comment::TITLE_DELETED}</p>")
+        expect(find_child_comment(response)["body_html"]).to eq("<p>#{Comment.title_deleted}</p>")
       end
 
       it "does not render the user information" do
@@ -148,7 +148,7 @@ RSpec.describe "Api::V0::Comments", type: :request do
       it "replaces the body_html" do
         get api_comments_path(a_id: article.id)
 
-        expect(find_child_comment(response)["body_html"]).to eq("<p>#{Comment::TITLE_HIDDEN}</p>")
+        expect(find_child_comment(response)["body_html"]).to eq("<p>#{Comment.title_hidden}</p>")
       end
 
       it "does not render the user information" do

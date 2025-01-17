@@ -19,12 +19,12 @@ module Stories
           pinned_at: PinnedArticle.updated_at.iso8601
         }
       else
-        render json: { error: "not found" }, status: :not_found
+        render json: { error: I18n.t("stories.pinned_articles_controller.not_found") }, status: :not_found
       end
     end
 
     def update
-      article = Article.published.find(params[:id])
+      article = Article.published.from_subforem.find(params[:id])
 
       PinnedArticle.set(article)
     rescue ActiveRecord::RecordNotFound => e

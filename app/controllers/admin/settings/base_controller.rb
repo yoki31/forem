@@ -8,7 +8,7 @@ module Admin
 
         if result.success?
           Audit::Logger.log(:internal, current_user, params.dup)
-          render json: { message: "Successfully updated settings." }, status: :ok
+          render json: { message: I18n.t("core.success_settings") }, status: :ok
         else
           render json: { error: result.errors.to_sentence }, status: :unprocessable_entity
         end
@@ -32,7 +32,7 @@ module Admin
       end
 
       def authorize_super_admin
-        raise Pundit::NotAuthorizedError unless current_user.has_role?(:super_admin)
+        raise Pundit::NotAuthorizedError unless current_user.super_admin?
       end
     end
   end

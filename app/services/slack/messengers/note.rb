@@ -9,16 +9,16 @@ module Slack
         Message: %<message>s
       TEXT
 
+      def self.call(...)
+        new(...).call
+      end
+
       def initialize(author_name:, status:, type:, report_id:, message:)
         @author_name = author_name
         @status = status
         @type = type
         @report_id = report_id
         @message = message
-      end
-
-      def self.call(...)
-        new(...).call
       end
 
       def call
@@ -35,10 +35,10 @@ module Slack
         )
 
         Slack::Messengers::Worker.perform_async(
-          message: final_message,
-          channel: type,
-          username: "new_note_bot",
-          icon_emoji: ":memo:",
+          "message" => final_message,
+          "channel" => type,
+          "username" => "new_note_bot",
+          "icon_emoji" => ":memo:",
         )
       end
 

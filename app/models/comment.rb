@@ -4,13 +4,16 @@ class Comment < ApplicationRecord
 
   include PgSearch::Model
   include Reactable
+  include AlgoliaSearchable
 
   BODY_MARKDOWN_SIZE_RANGE = (1..25_000)
 
   COMMENTABLE_TYPES = %w[Article PodcastEpisode].freeze
 
-  TITLE_DELETED = "[deleted]".freeze
-  TITLE_HIDDEN = "[hidden by post author]".freeze
+  LOW_QUALITY_THRESHOLD = -75
+  HIDE_THRESHOLD = -400 # hide comments below this threshold
+
+  VALID_SORT_OPTIONS = %w[top latest oldest].freeze
 
   URI_REGEXP = %r{
     \A
@@ -57,17 +60,15 @@ class Comment < ApplicationRecord
   validates :positive_reactions_count, presence: true
   validates :public_reactions_count, presence: true
   validates :reactions_count, presence: true
-  validates :user_id, presence: true
   validates :commentable, on: :create, presence: {
     message: lambda do |object, _data|
-      "#{object.commentable_type.presence || 'item'} has been deleted."
+      I18n.t("models.comment.has_been_deleted",
+             type: I18n.t("models.comment.type.#{object.commentable_type.presence || 'item'}"))
     end
   }
 
   after_create_commit :record_field_test_event
   after_create_commit :send_email_notification, if: :should_send_email_notification?
-  after_create_commit :create_first_reaction
-  after_create_commit :send_to_moderator
 
   after_commit :calculate_score, on: %i[create update]
 
@@ -87,15 +88,24 @@ class Comment < ApplicationRecord
                   }
 
   scope :eager_load_serialized_data, -> { includes(:user, :commentable) }
+  scope :good_quality, -> { where("comments.score > ?", LOW_QUALITY_THRESHOLD) }
 
   alias touch_by_reaction save
 
-  def self.tree_for(commentable, limit = 0)
-    commentable.comments
-      .includes(user: %i[setting profile])
-      .arrange(order: "score DESC")
-      .to_a[0..limit - 1]
-      .to_h
+  def self.title_deleted
+    I18n.t("models.comment.deleted")
+  end
+
+  def self.title_hidden
+    I18n.t("models.comment.hidden")
+  end
+
+  def self.title_image_only
+    I18n.t("models.comment.image_only")
+  end
+
+  def self.build_comment(params, &blk)
+    includes(user: :profile).new(params, &blk)
   end
 
   def search_id
@@ -135,12 +145,14 @@ class Comment < ApplicationRecord
   end
 
   def title(length = 80)
-    return TITLE_DELETED if deleted
-    return TITLE_HIDDEN if hidden_by_commentable_user
+    return self.class.title_deleted if deleted
+    return self.class.title_hidden if hidden_by_commentable_user
 
     text = ActionController::Base.helpers.strip_tags(processed_html).strip
+    return self.class.title_image_only if only_contains_image?(text)
+
     truncated_text = ActionController::Base.helpers.truncate(text, length: length).gsub("&#39;", "'").gsub("&amp;", "&")
-    HTMLEntities.new.decode(truncated_text)
+    Nokogiri::HTML.fragment(truncated_text).text # unescapes all HTML entities
   end
 
   def video
@@ -149,9 +161,9 @@ class Comment < ApplicationRecord
 
   def readable_publish_date
     if created_at.year == Time.current.year
-      created_at.strftime("%b %-e")
+      I18n.l(created_at, format: :short)
     else
-      created_at.strftime("%b %-e '%y")
+      I18n.l(created_at, format: :short_with_yy)
     end
   end
 
@@ -160,11 +172,38 @@ class Comment < ApplicationRecord
   end
 
   def safe_processed_html
-    processed_html.html_safe # rubocop:disable Rails/OutputSafety
+    processed_html_final.html_safe # rubocop:disable Rails/OutputSafety
   end
 
   def root_exists?
     ancestry && Comment.exists?(id: ancestry)
+  end
+
+  def by_staff_account?
+    user == User.staff_account
+  end
+
+  def privileged_reaction_counts
+    @privileged_reaction_counts ||= reactions.privileged_category.group(:category).count
+  end
+
+  def calculate_score
+    Comments::CalculateScoreWorker.perform_async(id)
+  end
+
+  def processed_html_final
+    # This is a final non-database-driven step to adjust processed html
+    # It is sort of a hack to avoid having to reprocess all articles
+    # It is currently only for this one cloudflare domain change
+    # It is duplicated across article, bullboard and comment where it is most needed
+    # In the future this could be made more customizable. For now it's just this one thing.
+    return processed_html if ApplicationConfig["PRIOR_CLOUDFLARE_IMAGES_DOMAIN"].blank? || ApplicationConfig["CLOUDFLARE_IMAGES_DOMAIN"].blank?
+
+    processed_html.gsub(ApplicationConfig["PRIOR_CLOUDFLARE_IMAGES_DOMAIN"], ApplicationConfig["CLOUDFLARE_IMAGES_DOMAIN"])
+  end
+
+  def subforem_id
+    commentable&.subforem_id
   end
 
   private
@@ -192,11 +231,14 @@ class Comment < ApplicationRecord
   end
 
   def evaluate_markdown
-    fixed_body_markdown = MarkdownProcessor::Fixer::FixForComment.call(body_markdown)
-    parsed_markdown = MarkdownProcessor::Parser.new(fixed_body_markdown, source: self, user: user)
-    self.processed_html = parsed_markdown.finalize(link_attributes: { rel: "nofollow" })
+    return unless user
+
+    renderer = ContentRenderer.new(body_markdown, source: self, user: user)
+    self.processed_html = renderer.process(link_attributes: { rel: "nofollow" }).processed_html
     wrap_timestamps_if_video_present! if commentable
     shorten_urls!
+  rescue ContentRenderer::ContentParsingError => e
+    errors.add(:base, ErrorMessages::Clean.call(e.message))
   end
 
   def adjust_comment_parent_based_on_depth
@@ -226,10 +268,6 @@ class Comment < ApplicationRecord
     self.processed_html = doc.to_html.html_safe # rubocop:disable Rails/OutputSafety
   end
 
-  def calculate_score
-    Comments::CalculateScoreWorker.perform_async(id)
-  end
-
   def after_create_checks
     create_id_code
     touch_user
@@ -251,10 +289,6 @@ class Comment < ApplicationRecord
     end
   end
 
-  def create_first_reaction
-    Comments::CreateFirstReactionWorker.perform_async(id, user_id)
-  end
-
   def after_destroy_actions
     Users::BustCacheWorker.perform_async(user_id)
     user.touch(:last_comment_at)
@@ -273,7 +307,7 @@ class Comment < ApplicationRecord
   def synchronous_bust
     commentable.touch(:last_comment_at) if commentable.respond_to?(:last_comment_at)
     user.touch(:last_comment_at)
-    EdgeCache::Bust.call(commentable.path.to_s) if commentable
+    commentable.purge if commentable
     expire_root_fragment
   end
 
@@ -282,34 +316,12 @@ class Comment < ApplicationRecord
   end
 
   def synchronous_spam_score_check
-    return unless
-      Settings::RateLimit.spam_trigger_terms.any? { |term| Regexp.new(term.downcase).match?(title.downcase) }
-
-    self.score = -1 # ensure notification is not sent if possibly spammy
+    self.score = -3 if user.registered_at > 48.hours.ago && body_markdown.include?("http")
+    self.score = -5 if Settings::RateLimit.trigger_spam_for?(text: [title, body_markdown].join("\n"))
   end
 
   def create_conditional_autovomits
-    return unless
-      Settings::RateLimit.spam_trigger_terms.any? { |term| Regexp.new(term.downcase).match?(title.downcase) } &&
-        user.registered_at > 5.days.ago
-
-    Reaction.create(
-      user_id: Settings::General.mascot_user_id,
-      reactable_id: id,
-      reactable_type: "Comment",
-      category: "vomit",
-    )
-
-    return unless Reaction.comment_vomits.where(reactable_id: user.comments.pluck(:id)).size > 2
-
-    user.add_role(:suspended)
-    Note.create(
-      author_id: Settings::General.mascot_user_id,
-      noteable_id: user_id,
-      noteable_type: "User",
-      reason: "automatic_suspend",
-      content: "User suspended for too many spammy articles, triggered by autovomit.",
-    )
+    Spam::Handler.handle_comment!(comment: self)
   end
 
   def should_send_email_notification?
@@ -318,6 +330,7 @@ class Comment < ApplicationRecord
       parent_user != user &&
       parent_user.notification_setting.email_comment_notifications &&
       parent_user.email &&
+      user&.badge_achievements_count&.positive? &&
       parent_or_root_article.receive_notifications
   end
 
@@ -337,11 +350,13 @@ class Comment < ApplicationRecord
   def discussion_not_locked
     return unless commentable_type == "Article" && commentable.discussion_lock
 
-    errors.add(:commentable_id, "the discussion is locked on this Post")
+    errors.add(:commentable_id, I18n.t("models.comment.locked"))
   end
 
   def published_article
-    errors.add(:commentable_id, "is not valid.") if commentable_type == "Article" && !commentable.published
+    return unless commentable_type == "Article" && !commentable.published
+
+    errors.add(:commentable_id, I18n.t("models.comment.published_article"))
   end
 
   def user_mentions_in_markdown
@@ -351,14 +366,16 @@ class Comment < ApplicationRecord
     mentions_count = Nokogiri::HTML(processed_html).css(".mentioned-user").size
     return if mentions_count <= Settings::RateLimit.mention_creation
 
-    errors.add(:base, "You cannot mention more than #{Settings::RateLimit.mention_creation} users in a comment!")
+    errors.add(:base,
+               I18n.t("models.comment.mention_too_many",
+                      count: Settings::RateLimit.mention_creation))
   end
 
   def record_field_test_event
     return if FieldTest.config["experiments"].nil?
 
     Users::RecordFieldTestEventWorker
-      .perform_async(user_id, "user_creates_comment")
+      .perform_async(user_id, AbExperiment::GoalConversionHandler::USER_CREATES_COMMENT_GOAL)
   end
 
   def notify_slack_channel_about_warned_users
@@ -367,5 +384,10 @@ class Comment < ApplicationRecord
 
   def parent_exists?
     parent_id && Comment.exists?(id: parent_id)
+  end
+
+  def only_contains_image?(stripped_text)
+    # If stripped text is blank and processed html has <img> tags, then it's an image-only comment
+    stripped_text.blank? && processed_html.include?("<img")
   end
 end

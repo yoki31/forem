@@ -1,11 +1,9 @@
 class UserBlockPolicy < ApplicationPolicy
   def create?
-    !user_suspended?
+    !user.spam_or_suspended?
   end
 
-  def destroy?
-    !user_suspended?
-  end
+  alias destroy? create?
 
   def permitted_attributes
     %i[id blocked_id]

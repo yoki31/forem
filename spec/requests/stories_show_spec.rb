@@ -1,8 +1,11 @@
-require "rails_helper"
+# spec/requests/stories_show_spec.rb
 
-RSpec.describe "StoriesShow", type: :request do
+require "rails_helper"
+require "request_store"
+
+RSpec.describe "StoriesShow" do
   let(:user) { create(:user) }
-  let(:org)     { create(:organization) }
+  let(:org)  { create(:organization) }
   let(:article) { create(:article, user: user) }
 
   describe "GET /:username/:slug (articles)" do
@@ -40,18 +43,16 @@ RSpec.describe "StoriesShow", type: :request do
       article.update(organization: org)
       get "#{old_path}?i=j"
       expect(response.body).to redirect_to article.path
-      expect(response.body).not_to redirect_to  "#{article.path}?i=j"
-      expect(response.body).not_to redirect_to  "#{article.path}?i=j"
+      expect(response.body).not_to redirect_to "#{article.path}?i=j"
+      expect(response.body).not_to redirect_to "#{article.path}?i=j"
     end
 
     ## Title tag
     it "renders signed-in title tag for signed-in user" do
-      allow(Settings::Community).to receive(:community_emoji).and_return("🌱")
-
       sign_in user
       get article.path
 
-      title = "<title>#{CGI.escapeHTML(article.title)} - #{community_name} #{community_emoji}</title>"
+      title = "<title>#{CGI.escapeHTML(article.title)} - #{community_name}</title>"
       expect(response.body).to include(title)
     end
 
@@ -71,13 +72,11 @@ RSpec.describe "StoriesShow", type: :request do
     end
 
     it "does not render title tag with search_optimized_title_preamble if set and not signed in" do
-      allow(Settings::Community).to receive(:community_emoji).and_return("🌱")
-
       sign_in user
       article.update_column(:search_optimized_title_preamble, "Hey this is a test")
       get article.path
 
-      title = "<title>#{CGI.escapeHTML(article.title)} - #{community_name} #{community_emoji}</title>"
+      title = "<title>#{CGI.escapeHTML(article.title)} - #{community_name}</title>"
       expect(response.body).to include(title)
     end
 
@@ -104,6 +103,13 @@ RSpec.describe "StoriesShow", type: :request do
       expect(response.body).not_to include("<span class=\"fs-xl color-base-70 block\">Hey this is a test</span>")
     end
 
+    it "renders proper wrapper content clases" do
+      get article.path
+      expect(response.body)
+        .to include(" #{article.decorate.cached_tag_list_array.map { |tag| "articletag-#{tag}" }.join(' ')}")
+      expect(response.body).to include(" articleuser-#{article.user_id}")
+    end
+
     ###
 
     it "renders date-no-year if article published this year" do
@@ -115,18 +121,6 @@ RSpec.describe "StoriesShow", type: :request do
       article.update_column(:published_at, 1.year.ago)
       get article.path
       expect(response.body).not_to include "date-no-year"
-    end
-
-    it "renders user payment pointer if set" do
-      article.user.update_column(:payment_pointer, "this-is-a-pointer")
-      get article.path
-      expect(response.body).to include "author-payment-pointer"
-      expect(response.body).to include "this-is-a-pointer"
-    end
-
-    it "does not render payment pointer if not set" do
-      get article.path
-      expect(response.body).not_to include "author-payment-pointer"
     end
 
     it "renders second and third users if present" do
@@ -150,25 +144,31 @@ RSpec.describe "StoriesShow", type: :request do
 
     it "redirects to appropriate page if user changes username" do
       old_username = user.username
-      user.update(username: "new_hotness_#{rand(10_000)}")
+      user.update_columns(username: "new_hotness_#{rand(10_000)}", old_username: old_username,
+                          old_old_username: user.old_username)
       get "/#{old_username}/#{article.slug}"
+      user.reload
       expect(response.body).to redirect_to("/#{user.username}/#{article.slug}")
       expect(response).to have_http_status(:moved_permanently)
     end
 
     it "redirects to appropriate page if user changes username twice" do
       old_username = user.username
-      user.update(username: "new_hotness_#{rand(10_000)}")
-      user.update(username: "new_new_username_#{rand(10_000)}")
+      user.update_columns(username: "new_hotness_#{rand(10_000)}", old_username: old_username,
+                          old_old_username: user.old_username)
+      user.update_columns(username: "new_new_username_#{rand(10_000)}", old_username: user.username,
+                          old_old_username: user.old_username)
       get "/#{old_username}/#{article.slug}"
       expect(response.body).to redirect_to("/#{user.username}/#{article.slug}")
       expect(response).to have_http_status(:moved_permanently)
     end
 
     it "redirects to appropriate page if user changes username twice and go to middle username" do
-      user.update(username: "new_hotness_#{rand(10_000)}")
+      user.update_columns(username: "new_hotness_#{rand(10_000)}", old_username: user.username,
+                          old_old_username: user.old_username)
       middle_username = user.username
-      user.update(username: "new_new_username_#{rand(10_000)}")
+      user.update_columns(username: "new_new_username_#{rand(10_000)}", old_username: user.username,
+                          old_old_username: user.old_username)
       get "/#{middle_username}/#{article.slug}"
       expect(response.body).to redirect_to("/#{user.username}/#{article.slug}")
       expect(response).to have_http_status(:moved_permanently)
@@ -192,7 +192,7 @@ RSpec.describe "StoriesShow", type: :request do
       # rubocop:enable RSpec/MessageChain
       get article.path
 
-      expect(response.status).to eq(400)
+      expect(response).to have_http_status(:bad_request)
     end
 
     it "has noindex if article has low score" do
@@ -212,6 +212,66 @@ RSpec.describe "StoriesShow", type: :request do
       article.user.update_column(:comments_count, 1)
       get article.path
       expect(response.body).not_to include("noindex")
+    end
+
+    it "renders og:image with main image if present ahead of social" do
+      article = create(:article, with_main_image: true, social_image: "https://example.com/image.jpg")
+      get article.path
+      expect(response.body).to include(%(property="og:image" content="#{article.main_image}"))
+    end
+
+    it "renders og:image with social if present and main image not so much" do
+      article = create(:article, with_main_image: false, social_image: "https://example.com/image.jpg")
+      get article.path
+      expect(response.body).to include(%(property="og:image" content="#{article.social_image}"))
+    end
+
+    context "when subforem logic is triggered by RequestStore" do
+      let!(:subforem)       { create(:subforem, domain: "www.example.com") }
+      let!(:default_subforem) { create(:subforem, domain: "#{rand(1000)}.com") }
+
+      before do
+        # Simulate a default_subforem stored in RequestStore
+        RequestStore.store[:default_subforem_id] = default_subforem.id
+      end
+
+      after do
+        # Clear RequestStore for isolation
+        RequestStore.store[:subforem_id] = nil
+        RequestStore.store[:default_subforem_id] = nil
+      end
+
+      it "redirects if article has subforem_id that doesn't match RequestStore.store[:subforem_id]" do
+        article.update_column(:subforem_id, create(:subforem, domain: "other.com").id)
+        # RequestStore is set to something different
+
+        get article.path
+        expect(response).to have_http_status(:moved_permanently)
+        expect(response.body).to redirect_to URL.article(article)
+      end
+
+      it "does not redirect if article.subforem_id == RequestStore.store[:subforem_id]" do
+        article.update_column(:subforem_id, subforem.id)
+        RequestStore.store[:subforem_id] = subforem.id
+
+        get article.path
+        expect(response).not_to have_http_status(:moved_permanently)
+        expect(response.body).not_to include("href=\"#{URL.article(article)}\"")
+      end
+
+      it "redirects if article has no subforem_id and RequestStore has a non-default subforem_id" do
+        allow(Subforem).to receive(:cached_id_by_domain).with("www.example.com").and_return(create(:subforem, domain: "other.com").id)
+
+        get article.path
+        expect(response).to have_http_status(:moved_permanently)
+      end
+
+      it "does not redirect if article has no subforem_id and RequestStore subforem_id == default_subforem" do
+        allow(Subforem).to receive(:cached_default_id).and_return(subforem.id)
+
+        get article.path
+        expect(response).not_to have_http_status(:moved_permanently)
+      end
     end
   end
 
